@@ -1,0 +1,408 @@
+"""MCP tool helper tests."""
+
+from __future__ import annotations
+
+from datetime import datetime, timezone
+from decimal import Decimal
+from types import SimpleNamespace
+from uuid import uuid4
+
+import pytest
+
+import memory_mcp.mcp_tools.server as server_module
+from memory_mcp.mcp_tools.server import (
+    ALL_SENSITIVITIES,
+    DEFAULT_SENSITIVITIES,
+    MAX_SEARCH_LIMIT,
+    _allowed_sensitivities,
+    _bounded_int,
+    _context_packet_to_dict,
+    _domain_profile_applies_to,
+    _memory_to_dict,
+    _preference_memory_types,
+    _tags_to_dict,
+    _validate_json_payload,
+    _validate_memory_scope,
+    _validate_scope_path,
+    _validate_uuid_list,
+)
+from memory_mcp.models import Memory
+from memory_mcp.services import ContextPacket, RequestClassification
+
+
+def test_memory_to_dict_is_json_safe_and_can_include_evidence() -> None:
+    memory_id = uuid4()
+    entity_id = uuid4()
+    memory = Memory(
+        id=memory_id,
+        entity_id=entity_id,
+        memory_type="project_fact",
+        summary="Uses PostgreSQL.",
+        content="memory-mcp uses PostgreSQL.",
+        confidence=Decimal("0.950"),
+        sensitivity="normal",
+        status="active",
+        applies_to={"project": "memory-mcp"},
+        metadata_={"seed": True},
+        evidence=[{"kind": "explicit", "text": "Project requirement."}],
+        created_at=datetime(2026, 4, 23, tzinfo=timezone.utc),
+        updated_at=datetime(2026, 4, 23, tzinfo=timezone.utc),
+    )
+
+    data = _memory_to_dict(memory, include_evidence=True)
+
+    assert data["id"] == str(memory_id)
+    assert data["entity_id"] == str(entity_id)
+    assert data["confidence"] == 0.95
+    assert data["created_at"] == "2026-04-23T00:00:00+00:00"
+    assert data["evidence"] == [{"kind": "explicit", "text": "Project requirement."}]
+
+
+def test_context_packet_to_dict_includes_rendered_and_token_estimates() -> None:
+    packet = ContextPacket(
+        request="project context",
+        classification=RequestClassification(
+            domain="project",
+            memory_types=("project_fact",),
+            scope="development",
+        ),
+        facts=["Uses PostgreSQL."],
+        before_token_estimate=100,
+        after_token_estimate=25,
+    )
+
+    data = _context_packet_to_dict(packet)
+
+    assert data["classification"]["domain"] == "project"
+    assert data["classification"]["memory_types"] == ["project_fact"]
+    assert data["facts"] == ["Uses PostgreSQL."]
+    assert data["token_estimates"]["budget"] is None
+    assert data["token_estimates"]["reduction_percent"] == 75.0
+    assert "# Context Packet" in data["rendered"]
+
+
+def test_preference_domain_mapping() -> None:
+    assert _preference_memory_types("coding") == ("coding_preference",)
+    assert _preference_memory_types("entertainment") == (
+        "entertainment_preference",
+        "inferred_preference",
+    )
+    assert "coding_preference" in _preference_memory_types(None)
+
+
+def test_domain_profile_applies_to_prefers_person_over_project() -> None:
+    assert _domain_profile_applies_to(person_id="person-1", project="memory-mcp") == {
+        "person_id": "person-1"
+    }
+    assert _domain_profile_applies_to(person_id=None, project="memory-mcp") == {
+        "project": "memory-mcp"
+    }
+    assert _domain_profile_applies_to(person_id=None, project=None) is None
+
+
+def test_sensitive_policy_defaults_to_normal_only() -> None:
+    assert _allowed_sensitivities(False) == DEFAULT_SENSITIVITIES
+    assert _allowed_sensitivities(True) == ALL_SENSITIVITIES
+
+
+def test_mcp_bounds_reject_oversized_requests() -> None:
+    assert _bounded_int("limit", MAX_SEARCH_LIMIT, minimum=1, maximum=MAX_SEARCH_LIMIT) == MAX_SEARCH_LIMIT
+
+    try:
+        _bounded_int("limit", MAX_SEARCH_LIMIT + 1, minimum=1, maximum=MAX_SEARCH_LIMIT)
+    except ValueError as exc:
+        assert "limit" in str(exc)
+    else:
+        raise AssertionError("Expected oversized limit to fail")
+
+
+def test_json_payload_size_is_bounded() -> None:
+    try:
+        _validate_json_payload("metadata", {"blob": "x" * 20_001}, max_chars=100)
+    except ValueError as exc:
+        assert "metadata" in str(exc)
+    else:
+        raise AssertionError("Expected oversized JSON payload to fail")
+
+
+def test_memory_scope_validator_accepts_known_scopes() -> None:
+    assert _validate_memory_scope("component") == "component"
+    assert _validate_memory_scope("global") == "global"
+    assert _validate_memory_scope("project") == "project"
+    assert _validate_memory_scope("workspace") == "workspace"
+    assert _validate_memory_scope(None) is None
+
+
+def test_scope_path_and_override_validators() -> None:
+    memory_id = uuid4()
+
+    assert _validate_scope_path(["global", "project:game", "branch:combat"]) == [
+        "global",
+        "project:game",
+        "branch:combat",
+    ]
+    assert _validate_uuid_list("overrides_memory_ids", [str(memory_id)]) == [str(memory_id)]
+
+    with pytest.raises(ValueError, match="badly formed hexadecimal UUID string"):
+        _validate_uuid_list("overrides_memory_ids", ["not-a-uuid"])
+
+
+def test_tags_to_dict_serializes_tag_objects() -> None:
+    tag_id = uuid4()
+    memory_id = uuid4()
+    tags = _tags_to_dict(
+        [
+            SimpleNamespace(
+                id=tag_id,
+                memory_id=memory_id,
+                tag="project",
+                status="active",
+            )
+        ]
+    )
+
+    assert tags == [
+        {
+            "id": str(tag_id),
+            "memory_id": str(memory_id),
+            "tag": "project",
+            "status": "active",
+        }
+    ]
+
+
+def test_archive_memory_tool_archives_existing_memory(monkeypatch) -> None:
+    memory_id = uuid4()
+    archived = Memory(
+        id=memory_id,
+        memory_type="project_fact",
+        content="Archived memory.",
+        status="archived",
+        applies_to={"project": "memory-test"},
+    )
+
+    class FakeService:
+        def __init__(self, session) -> None:
+            self.session = session
+
+        def archive_memory(self, parsed_memory_id):
+            assert parsed_memory_id == memory_id
+            return archived
+
+    class FakeScope:
+        def __enter__(self):
+            return object()
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+    monkeypatch.setattr(server_module, "MemoryService", FakeService)
+    monkeypatch.setattr(server_module, "session_scope", lambda: FakeScope())
+
+    result = server_module.archive_memory(str(memory_id))
+
+    assert result["memory"]["id"] == str(memory_id)
+    assert result["memory"]["status"] == "archived"
+
+
+def test_supersede_memory_tool_replaces_memory_and_adds_tags(monkeypatch) -> None:
+    old_memory_id = uuid4()
+    new_memory_id = uuid4()
+    replacement = Memory(
+        id=new_memory_id,
+        memory_type="project_fact",
+        content="Current repo is a Flask task tracker.",
+        status="active",
+        applies_to={"memory_scope": "project", "project": "memory-test"},
+        supersedes_memory_id=old_memory_id,
+    )
+
+    class FakeService:
+        def __init__(self, session) -> None:
+            self.session = session
+
+        def supersede_memory(self, parsed_memory_id, **kwargs):
+            assert parsed_memory_id == old_memory_id
+            assert kwargs["applies_to"] == {
+                "scope": "development",
+                "memory_scope": "project",
+                "workspace": "corp-root",
+                "project": "memory-test",
+            }
+            return replacement
+
+        def tag_memory(self, memory_id, tag):
+            return SimpleNamespace(
+                id=uuid4(),
+                memory_id=memory_id,
+                tag=tag,
+                status="active",
+            )
+
+    class FakeScope:
+        def __enter__(self):
+            return object()
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+    monkeypatch.setattr(server_module, "MemoryService", FakeService)
+    monkeypatch.setattr(server_module, "session_scope", lambda: FakeScope())
+
+    result = server_module.supersede_memory(
+        str(old_memory_id),
+        memory_type="project_fact",
+        content="Current repo is a Flask task tracker.",
+        applies_to={"scope": "development"},
+        workspace="corp-root",
+        project="memory-test",
+        tags=["project", "flask"],
+    )
+
+    assert result["superseded_memory_id"] == str(old_memory_id)
+    assert result["memory"]["id"] == str(new_memory_id)
+    assert result["memory"]["supersedes_memory_id"] == str(old_memory_id)
+    assert [tag["tag"] for tag in result["tags"]] == ["project", "flask"]
+
+
+def test_supersede_memory_requires_project_for_project_scope() -> None:
+    with pytest.raises(ValueError, match="project is required"):
+        server_module.supersede_memory(
+            str(uuid4()),
+            memory_type="project_fact",
+            content="Replacement",
+            memory_scope="project",
+        )
+
+
+def test_add_memory_infers_component_scope(monkeypatch) -> None:
+    created = Memory(
+        id=uuid4(),
+        memory_type="project_fact",
+        content="Auth component uses session cookies.",
+        applies_to={
+            "memory_scope": "component",
+            "workspace": "corp-root",
+            "project": "payments-api",
+            "component": "auth",
+            "topic": "sessions",
+        },
+    )
+
+    class FakeService:
+        def __init__(self, session) -> None:
+            self.session = session
+
+        def create_memory(self, **kwargs):
+            assert kwargs["applies_to"] == {
+                "scope": "development",
+                "memory_scope": "component",
+                "workspace": "corp-root",
+                "project": "payments-api",
+                "component": "auth",
+                "topic": "sessions",
+            }
+            return created
+
+        def tag_memory(self, memory_id, tag):
+            return SimpleNamespace(
+                id=uuid4(),
+                memory_id=memory_id,
+                tag=tag,
+                status="active",
+            )
+
+    class FakeScope:
+        def __enter__(self):
+            return object()
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+    monkeypatch.setattr(server_module, "MemoryService", FakeService)
+    monkeypatch.setattr(server_module, "session_scope", lambda: FakeScope())
+
+    result = server_module.add_memory(
+        memory_type="project_fact",
+        content="Auth component uses session cookies.",
+        applies_to={"scope": "development"},
+        workspace="corp-root",
+        project="payments-api",
+        component="auth",
+        topic="sessions",
+        tags=["auth"],
+    )
+
+    assert result["memory"]["applies_to"]["memory_scope"] == "component"
+
+
+def test_add_memory_accepts_scope_path_validity_and_branch_override(monkeypatch) -> None:
+    parent_memory_id = uuid4()
+    created = Memory(
+        id=uuid4(),
+        memory_type="architecture_decision",
+        content="Branch uses event-driven input.",
+        applies_to={
+            "scope_path": [
+                "global",
+                "project:Metroidvania",
+                "module:combat",
+                "branch:combat-refactor",
+            ],
+            "scope_type": "branch",
+            "valid_from": "2026-04-24T00:00:00+00:00",
+        },
+        metadata_={"overrides_memory_ids": [str(parent_memory_id)]},
+    )
+
+    class FakeService:
+        def __init__(self, session) -> None:
+            self.session = session
+
+        def create_memory(self, **kwargs):
+            assert kwargs["applies_to"] == created.applies_to
+            assert kwargs["metadata"] == {"overrides_memory_ids": [str(parent_memory_id)]}
+            return created
+
+    class FakeScope:
+        def __enter__(self):
+            return object()
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+    monkeypatch.setattr(server_module, "MemoryService", FakeService)
+    monkeypatch.setattr(server_module, "session_scope", lambda: FakeScope())
+
+    result = server_module.add_memory(
+        memory_type="architecture_decision",
+        content="Branch uses event-driven input.",
+        scope_path=[
+            "global",
+            "project:Metroidvania",
+            "module:combat",
+            "branch:combat-refactor",
+        ],
+        scope_type="branch",
+        valid_from="2026-04-24T00:00:00+00:00",
+        overrides_memory_ids=[str(parent_memory_id)],
+    )
+
+    assert result["memory"]["applies_to"]["scope_path"][-1] == "branch:combat-refactor"
+
+
+def test_component_scope_requires_project_and_component() -> None:
+    with pytest.raises(ValueError, match="project is required"):
+        server_module.add_memory(
+            memory_type="project_fact",
+            content="Replacement",
+            memory_scope="component",
+            component="auth",
+        )
+    with pytest.raises(ValueError, match="component is required"):
+        server_module.add_memory(
+            memory_type="project_fact",
+            content="Replacement",
+            memory_scope="component",
+            project="payments-api",
+        )
