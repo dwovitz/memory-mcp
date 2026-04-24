@@ -7,6 +7,9 @@ supports hybrid retrieval over structured filters and full text, synthesizes
 compact LLM-ready context packets, and exposes the system through a local MCP
 stdio server.
 
+For agent-client setup across Cursor, GitHub Copilot, Codex, and Claude Code,
+see [CLIENT_SETUP_README.md](CLIENT_SETUP_README.md).
+
 The current implementation includes:
 
 - Dockerized PostgreSQL with pgvector and Windows bind-mount persistence.
