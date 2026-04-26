@@ -76,7 +76,7 @@ class MemoryRepository:
         evidence: list[Any] | None = None,
         metadata: dict[str, Any] | None = None,
         confidence: Decimal | str | float = Decimal("1.0"),
-        sensitivity: str = "normal",
+        sensitivity: str | None = None,
         applies_to: dict[str, Any] | None = None,
     ) -> Memory:
         old_memory = self.update_status(old_memory_id, "superseded")
@@ -88,7 +88,7 @@ class MemoryRepository:
             evidence=evidence,
             metadata=metadata,
             confidence=confidence,
-            sensitivity=sensitivity,
+            sensitivity=sensitivity if sensitivity is not None else old_memory.sensitivity,
             status="active",
             applies_to=applies_to if applies_to is not None else old_memory.applies_to,
             supersedes_memory_id=old_memory_id,

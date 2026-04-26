@@ -20,6 +20,7 @@ TOPIC_KEY = "topic"
 VALID_FROM_KEY = "valid_from"
 VALID_TO_KEY = "valid_to"
 OVERRIDES_MEMORY_IDS_KEY = "overrides_memory_ids"
+DEFAULT_DEVELOPMENT_SCOPE = "development"
 
 
 def with_memory_scope(
@@ -43,6 +44,18 @@ def with_memory_scope(
         scoped[COMPONENT_KEY] = component
     if topic is not None:
         scoped[TOPIC_KEY] = topic
+    return scoped
+
+
+def with_default_scope(
+    applies_to: Mapping[str, Any] | None,
+    *,
+    scope: str = DEFAULT_DEVELOPMENT_SCOPE,
+) -> dict[str, Any]:
+    """Return a copy of applies_to with a default scope when none is set."""
+
+    scoped = dict(applies_to or {})
+    scoped.setdefault("scope", scope)
     return scoped
 
 

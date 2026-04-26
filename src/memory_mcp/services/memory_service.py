@@ -16,6 +16,7 @@ from memory_mcp.scopes import (
     GLOBAL_MEMORY_SCOPE,
     PROJECT_MEMORY_SCOPE,
     WORKSPACE_MEMORY_SCOPE,
+    with_default_scope,
     with_memory_scope,
 )
 
@@ -134,7 +135,7 @@ class MemoryService:
             sensitivity=sensitivity,
             status=status,
             applies_to=with_memory_scope(
-                applies_to,
+                with_default_scope(applies_to),
                 memory_scope=PROJECT_MEMORY_SCOPE,
                 project=project,
             ),
@@ -166,7 +167,7 @@ class MemoryService:
             sensitivity=sensitivity,
             status=status,
             applies_to=with_memory_scope(
-                applies_to,
+                with_default_scope(applies_to),
                 memory_scope=WORKSPACE_MEMORY_SCOPE,
                 workspace=workspace,
             ),
@@ -201,7 +202,7 @@ class MemoryService:
             sensitivity=sensitivity,
             status=status,
             applies_to=with_memory_scope(
-                applies_to,
+                with_default_scope(applies_to),
                 memory_scope=COMPONENT_MEMORY_SCOPE,
                 workspace=workspace,
                 project=project,
@@ -227,7 +228,7 @@ class MemoryService:
         evidence: list[Any] | None = None,
         metadata: dict[str, Any] | None = None,
         confidence: Decimal | str | float = Decimal("1.0"),
-        sensitivity: str = "normal",
+        sensitivity: str | None = None,
         applies_to: dict[str, Any] | None = None,
     ) -> Memory:
         return self.memories.supersede(

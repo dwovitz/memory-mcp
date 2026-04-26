@@ -6,6 +6,7 @@ from collections.abc import Sequence
 from datetime import datetime
 from decimal import Decimal
 import json
+import os
 from typing import Any
 from uuid import UUID
 
@@ -22,6 +23,7 @@ from memory_mcp.scopes import (
     PROJECT_MEMORY_SCOPE,
     SCOPE_PATH_KEY,
     WORKSPACE_MEMORY_SCOPE,
+    with_default_scope,
     with_memory_scope,
     with_scope_path,
 )
@@ -49,6 +51,8 @@ DEFAULT_CONTEXT_TOKENS = 1200
 MAX_CONTEXT_TOKENS = 6000
 MAX_SCOPE_PATH_PARTS = 32
 MAX_SCOPE_PATH_PART_CHARS = 200
+MUTATION_TOOLS_ENV = "MEMORY_MCP_ENABLE_MUTATION_TOOLS"
+SENSITIVE_TOOLS_ENV = "MEMORY_MCP_ENABLE_SENSITIVE_TOOLS"
 
 
 @mcp.tool()
@@ -73,9 +77,12 @@ def add_memory(
     valid_to: str | None = None,
     overrides_memory_ids: list[str] | None = None,
     tags: list[str] | None = None,
+    include_content: bool = False,
+    include_evidence: bool = False,
 ) -> dict[str, Any]:
     """Add a memory and optional tags."""
 
+    _require_mutation_tools_enabled()
     content = _validate_text("content", content, max_chars=MAX_TEXT_CHARS, required=True)
     summary = _validate_text("summary", summary, max_chars=MAX_SUMMARY_CHARS)
     evidence = _validate_json_payload("evidence", evidence, max_chars=MAX_JSON_CHARS)
@@ -143,8 +150,17 @@ def add_memory(
             applies_to=applies_to,
         )
         created_tags = [service.tag_memory(memory.id, tag) for tag in tags or []]
+        _require_sensitive_echo_allowed(
+            memory.sensitivity,
+            include_content=include_content,
+            include_evidence=include_evidence,
+        )
         return {
-            "memory": _memory_to_dict(memory, include_evidence=True),
+            "memory": _memory_write_to_dict(
+                memory,
+                include_content=include_content,
+                include_evidence=include_evidence,
+            ),
             "tags": _tags_to_dict(created_tags),
         }
 
@@ -156,6 +172,7 @@ def archive_memory(
 ) -> dict[str, Any]:
     """Archive an existing memory by UUID."""
 
+    _require_mutation_tools_enabled()
     with session_scope() as session:
         service = MemoryService(session)
         memory = service.archive_memory(_parse_required_uuid(memory_id, "memory_id"))
@@ -174,7 +191,7 @@ def supersede_memory(
     evidence: list[dict[str, Any]] | None = None,
     metadata: dict[str, Any] | None = None,
     confidence: float = 1.0,
-    sensitivity: str = "normal",
+    sensitivity: str | None = None,
     applies_to: dict[str, Any] | None = None,
     memory_scope: str | None = None,
     workspace: str | None = None,
@@ -187,9 +204,12 @@ def supersede_memory(
     valid_to: str | None = None,
     overrides_memory_ids: list[str] | None = None,
     tags: list[str] | None = None,
+    include_content: bool = False,
+    include_evidence: bool = False,
 ) -> dict[str, Any]:
     """Supersede an existing memory with a replacement memory."""
 
+    _require_mutation_tools_enabled()
     content = _validate_text("content", content, max_chars=MAX_TEXT_CHARS, required=True)
     summary = _validate_text("summary", summary, max_chars=MAX_SUMMARY_CHARS)
     evidence = _validate_json_payload("evidence", evidence, max_chars=MAX_JSON_CHARS)
@@ -207,7 +227,7 @@ def supersede_memory(
     overrides_memory_ids = _validate_uuid_list("overrides_memory_ids", overrides_memory_ids)
     tags = _validate_tags(tags)
     confidence = _validate_confidence(confidence)
-    sensitivity = _validate_sensitivity(sensitivity)
+    sensitivity = None if sensitivity is None else _validate_sensitivity(sensitivity)
     if component and memory_scope is None:
         memory_scope = COMPONENT_MEMORY_SCOPE
     elif project and memory_scope is None:
@@ -258,9 +278,18 @@ def supersede_memory(
             applies_to=applies_to,
         )
         created_tags = [service.tag_memory(memory.id, tag) for tag in tags or []]
+        _require_sensitive_echo_allowed(
+            memory.sensitivity,
+            include_content=include_content,
+            include_evidence=include_evidence,
+        )
         return {
             "superseded_memory_id": memory_id,
-            "memory": _memory_to_dict(memory, include_evidence=True),
+            "memory": _memory_write_to_dict(
+                memory,
+                include_content=include_content,
+                include_evidence=include_evidence,
+            ),
             "tags": _tags_to_dict(created_tags),
         }
 
@@ -639,6 +668,7 @@ def run_pruning_pass(
 ) -> dict[str, Any]:
     """Run a pruning pass that archives/supersedes/compresses without deleting evidence."""
 
+    _require_mutation_tools_enabled()
     stale_after_days = _bounded_int(
         "stale_after_days",
         stale_after_days,
@@ -701,6 +731,28 @@ def _memory_to_dict(memory: Memory, *, include_evidence: bool = False) -> dict[s
     return data
 
 
+def _memory_write_to_dict(
+    memory: Memory,
+    *,
+    include_content: bool = False,
+    include_evidence: bool = False,
+) -> dict[str, Any]:
+    data = {
+        "id": str(memory.id),
+        "entity_id": str(memory.entity_id) if memory.entity_id else None,
+        "memory_type": memory.memory_type,
+        "sensitivity": memory.sensitivity,
+        "status": memory.status,
+        "supersedes_memory_id": str(memory.supersedes_memory_id) if memory.supersedes_memory_id else None,
+    }
+    if include_content:
+        data["summary"] = memory.summary
+        data["content"] = memory.content
+    if include_evidence:
+        data["evidence"] = memory.evidence or []
+    return data
+
+
 def _context_packet_to_dict(packet: ContextPacket) -> dict[str, Any]:
     return {
         "rendered": packet.render(),
@@ -738,7 +790,37 @@ def _tags_to_dict(tags: Sequence[Any]) -> list[dict[str, Any]]:
 
 
 def _allowed_sensitivities(include_sensitive: bool) -> tuple[str, ...]:
+    if include_sensitive:
+        _require_sensitive_tools_enabled()
     return ALL_SENSITIVITIES if include_sensitive else DEFAULT_SENSITIVITIES
+
+
+def _env_flag(name: str) -> bool:
+    return os.getenv(name, "").strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _require_mutation_tools_enabled() -> None:
+    if not _env_flag(MUTATION_TOOLS_ENV):
+        raise PermissionError(
+            f"Mutation MCP tools are disabled. Set {MUTATION_TOOLS_ENV}=true to enable them."
+        )
+
+
+def _require_sensitive_tools_enabled() -> None:
+    if not _env_flag(SENSITIVE_TOOLS_ENV):
+        raise PermissionError(
+            f"Sensitive MCP access is disabled. Set {SENSITIVE_TOOLS_ENV}=true to enable it."
+        )
+
+
+def _require_sensitive_echo_allowed(
+    sensitivity: str,
+    *,
+    include_content: bool,
+    include_evidence: bool,
+) -> None:
+    if sensitivity in {"sensitive", "private"} and (include_content or include_evidence):
+        _require_sensitive_tools_enabled()
 
 
 def _bounded_int(name: str, value: int, *, minimum: int, maximum: int) -> int:
@@ -882,6 +964,8 @@ def _scoped_applies_to(
     component: str | None,
     topic: str | None,
 ) -> dict[str, Any]:
+    if memory_scope in {COMPONENT_MEMORY_SCOPE, PROJECT_MEMORY_SCOPE, WORKSPACE_MEMORY_SCOPE}:
+        applies_to = with_default_scope(applies_to)
     return with_memory_scope(
         applies_to,
         memory_scope=memory_scope,

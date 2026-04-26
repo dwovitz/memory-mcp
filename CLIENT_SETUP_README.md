@@ -84,6 +84,19 @@ Portable Python module form:
 Keep `.env` in the repo root. The MCP process loads database settings from
 there, while `.env` remains ignored by Git.
 
+By default, MCP access is read-only for normal-sensitivity memory. Enable
+additional capabilities only for trusted local clients:
+
+```text
+MEMORY_MCP_ENABLE_MUTATION_TOOLS=true
+MEMORY_MCP_ENABLE_SENSITIVE_TOOLS=true
+```
+
+`MEMORY_MCP_ENABLE_MUTATION_TOOLS` enables `add_memory`, `archive_memory`,
+`supersede_memory`, and `run_pruning_pass`. `MEMORY_MCP_ENABLE_SENSITIVE_TOOLS`
+enables `include_sensitive=true` reads and echoed sensitive/private write
+content or evidence.
+
 ## Client Configuration Locations
 
 Exact UI paths change by client. The important part is to register one local
@@ -140,6 +153,10 @@ Store a durable project fact:
   "tags": ["retrieval", "postgres"]
 }
 ```
+
+This write example requires `MEMORY_MCP_ENABLE_MUTATION_TOOLS=true`. Scoped
+project, workspace, and component writes default to `scope="development"` when
+no explicit `applies_to.scope` is provided.
 
 ## Branch-Aware Usage
 
@@ -214,6 +231,8 @@ Before substantial implementation, review, or planning:
 - Prefer `get_context_packet` with the narrowest project/component/scope_path.
 - Use `include_global=true` when global preferences may apply.
 - Keep `include_sensitive=false` unless the user explicitly asks.
+- Do not enable mutation or sensitive MCP capabilities unless the current local
+  client is trusted.
 
 After meaningful project work:
 - Store only durable, non-sensitive project facts.

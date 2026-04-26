@@ -10,6 +10,13 @@ stdio server.
 For agent-client setup across Cursor, GitHub Copilot, Codex, and Claude Code,
 see [CLIENT_SETUP_README.md](CLIENT_SETUP_README.md).
 
+## Documentation
+
+- [Documentation index](docs/README.md)
+- [Goals](docs/GOALS.md)
+- [Architecture](docs/ARCHITECTURE.md)
+- [Agent workflow](docs/AGENT_WORKFLOW.md)
+
 The current implementation includes:
 
 - Dockerized PostgreSQL with pgvector and Windows bind-mount persistence.
@@ -85,11 +92,20 @@ POSTGRES_PASSWORD=<required local password>
 POSTGRES_PORT=5432
 POSTGRES_BIND_HOST=127.0.0.1
 PGDATA_HOST_PATH=C:\ai\memory-postgres-data
+MEMORY_MCP_ENABLE_MUTATION_TOOLS=false
+MEMORY_MCP_ENABLE_SENSITIVE_TOOLS=false
 ```
 
 `PGDATA_HOST_PATH` is the Windows host directory used for durable PostgreSQL
 files. Keep it outside the repository. `POSTGRES_BIND_HOST=127.0.0.1` keeps
 PostgreSQL reachable only from the local machine by default.
+
+MCP safety gates are disabled by default:
+
+- `MEMORY_MCP_ENABLE_MUTATION_TOOLS=true` enables `add_memory`,
+  `archive_memory`, `supersede_memory`, and `run_pruning_pass`.
+- `MEMORY_MCP_ENABLE_SENSITIVE_TOOLS=true` enables `include_sensitive=true`
+  reads and sensitive/private write echo.
 
 ## Windows Docker Database
 
@@ -287,9 +303,15 @@ Security defaults:
 - The MCP server assumes a trusted local stdio client.
 - Search, preference, media, and context-packet tools return only `normal`
   sensitivity memories by default.
-- Sensitive and private memories require `include_sensitive=true`.
+- Mutating MCP tools are disabled unless
+  `MEMORY_MCP_ENABLE_MUTATION_TOOLS=true` is set.
+- Sensitive and private memories require both
+  `MEMORY_MCP_ENABLE_SENSITIVE_TOOLS=true` and `include_sensitive=true`.
 - Evidence is omitted by default for high-risk tools and must be requested with
   `include_evidence=true` where supported.
+- Memory write tools return minimal metadata by default. Use
+  `include_content=true` or `include_evidence=true` only when the MCP client
+  should receive echoed write details.
 - Tool inputs are bounded to reduce accidental large reads/writes.
 
 ### Hierarchical Memory Scope

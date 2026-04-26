@@ -107,6 +107,10 @@ def evidence(kind: str, text: str) -> list[dict[str, Any]]:
     ]
 
 
+def token_estimate(value: int) -> int:
+    return value
+
+
 def rows() -> dict[str, list[dict[str, Any]]]:
     entities = [
         {
@@ -596,7 +600,7 @@ def rows() -> dict[str, list[dict[str, Any]]]:
             "title": "Coding Context Snapshot",
             "purpose": "Synthetic compact packet for project work.",
             "content": "Project: memory-mcp is local-first Python/PostgreSQL. Preference: keep changes modular and avoid overbuilding.",
-            "token_estimate": 34,
+            "token_estimate": token_estimate(34),
             "metadata": common_metadata("context_packet"),
             "confidence": "0.950",
             "sensitivity": "normal",
@@ -609,7 +613,7 @@ def rows() -> dict[str, list[dict[str, Any]]]:
             "title": "Entertainment Preference Snapshot",
             "purpose": "Synthetic compact packet for recommendations.",
             "content": "Alex likes mystery-driven sci-fi such as Severance and dislikes relentlessly bleak zombie stories.",
-            "token_estimate": 28,
+            "token_estimate": token_estimate(28),
             "metadata": common_metadata("context_packet"),
             "confidence": "0.820",
             "sensitivity": "normal",

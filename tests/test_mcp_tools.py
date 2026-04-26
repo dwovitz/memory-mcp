@@ -13,12 +13,15 @@ import memory_mcp.mcp_tools.server as server_module
 from memory_mcp.mcp_tools.server import (
     ALL_SENSITIVITIES,
     DEFAULT_SENSITIVITIES,
+    MUTATION_TOOLS_ENV,
     MAX_SEARCH_LIMIT,
+    SENSITIVE_TOOLS_ENV,
     _allowed_sensitivities,
     _bounded_int,
     _context_packet_to_dict,
     _domain_profile_applies_to,
     _memory_to_dict,
+    _memory_write_to_dict,
     _preference_memory_types,
     _tags_to_dict,
     _validate_json_payload,
@@ -100,8 +103,15 @@ def test_domain_profile_applies_to_prefers_person_over_project() -> None:
     assert _domain_profile_applies_to(person_id=None, project=None) is None
 
 
-def test_sensitive_policy_defaults_to_normal_only() -> None:
+def test_sensitive_policy_defaults_to_normal_only(monkeypatch) -> None:
+    monkeypatch.delenv(SENSITIVE_TOOLS_ENV, raising=False)
+
     assert _allowed_sensitivities(False) == DEFAULT_SENSITIVITIES
+
+    with pytest.raises(PermissionError, match="Sensitive MCP access is disabled"):
+        _allowed_sensitivities(True)
+
+    monkeypatch.setenv(SENSITIVE_TOOLS_ENV, "true")
     assert _allowed_sensitivities(True) == ALL_SENSITIVITIES
 
 
@@ -171,7 +181,36 @@ def test_tags_to_dict_serializes_tag_objects() -> None:
     ]
 
 
+def test_memory_write_to_dict_omits_content_and_evidence_by_default() -> None:
+    memory = Memory(
+        id=uuid4(),
+        memory_type="project_fact",
+        summary="Short summary.",
+        content="Sensitive implementation detail.",
+        evidence=[{"kind": "explicit", "text": "Source detail."}],
+        sensitivity="normal",
+        status="active",
+    )
+
+    default_data = _memory_write_to_dict(memory)
+    echoed_data = _memory_write_to_dict(memory, include_content=True, include_evidence=True)
+
+    assert "content" not in default_data
+    assert "summary" not in default_data
+    assert "evidence" not in default_data
+    assert echoed_data["content"] == "Sensitive implementation detail."
+    assert echoed_data["evidence"] == [{"kind": "explicit", "text": "Source detail."}]
+
+
+def test_mutation_tools_require_explicit_capability(monkeypatch) -> None:
+    monkeypatch.delenv(MUTATION_TOOLS_ENV, raising=False)
+
+    with pytest.raises(PermissionError, match="Mutation MCP tools are disabled"):
+        server_module.add_memory(memory_type="project_fact", content="Blocked")
+
+
 def test_archive_memory_tool_archives_existing_memory(monkeypatch) -> None:
+    monkeypatch.setenv(MUTATION_TOOLS_ENV, "true")
     memory_id = uuid4()
     archived = Memory(
         id=memory_id,
@@ -206,6 +245,7 @@ def test_archive_memory_tool_archives_existing_memory(monkeypatch) -> None:
 
 
 def test_supersede_memory_tool_replaces_memory_and_adds_tags(monkeypatch) -> None:
+    monkeypatch.setenv(MUTATION_TOOLS_ENV, "true")
     old_memory_id = uuid4()
     new_memory_id = uuid4()
     replacement = Memory(
@@ -229,6 +269,7 @@ def test_supersede_memory_tool_replaces_memory_and_adds_tags(monkeypatch) -> Non
                 "workspace": "corp-root",
                 "project": "memory-test",
             }
+            assert kwargs["sensitivity"] is None
             return replacement
 
         def tag_memory(self, memory_id, tag):
@@ -262,10 +303,13 @@ def test_supersede_memory_tool_replaces_memory_and_adds_tags(monkeypatch) -> Non
     assert result["superseded_memory_id"] == str(old_memory_id)
     assert result["memory"]["id"] == str(new_memory_id)
     assert result["memory"]["supersedes_memory_id"] == str(old_memory_id)
+    assert "content" not in result["memory"]
+    assert "evidence" not in result["memory"]
     assert [tag["tag"] for tag in result["tags"]] == ["project", "flask"]
 
 
-def test_supersede_memory_requires_project_for_project_scope() -> None:
+def test_supersede_memory_requires_project_for_project_scope(monkeypatch) -> None:
+    monkeypatch.setenv(MUTATION_TOOLS_ENV, "true")
     with pytest.raises(ValueError, match="project is required"):
         server_module.supersede_memory(
             str(uuid4()),
@@ -276,6 +320,7 @@ def test_supersede_memory_requires_project_for_project_scope() -> None:
 
 
 def test_add_memory_infers_component_scope(monkeypatch) -> None:
+    monkeypatch.setenv(MUTATION_TOOLS_ENV, "true")
     created = Memory(
         id=uuid4(),
         memory_type="project_fact",
@@ -333,10 +378,12 @@ def test_add_memory_infers_component_scope(monkeypatch) -> None:
         tags=["auth"],
     )
 
-    assert result["memory"]["applies_to"]["memory_scope"] == "component"
+    assert result["memory"]["id"] == str(created.id)
+    assert "content" not in result["memory"]
 
 
 def test_add_memory_accepts_scope_path_validity_and_branch_override(monkeypatch) -> None:
+    monkeypatch.setenv(MUTATION_TOOLS_ENV, "true")
     parent_memory_id = uuid4()
     created = Memory(
         id=uuid4(),
@@ -388,10 +435,107 @@ def test_add_memory_accepts_scope_path_validity_and_branch_override(monkeypatch)
         overrides_memory_ids=[str(parent_memory_id)],
     )
 
-    assert result["memory"]["applies_to"]["scope_path"][-1] == "branch:combat-refactor"
+    assert result["memory"]["id"] == str(created.id)
 
 
-def test_component_scope_requires_project_and_component() -> None:
+def test_add_memory_preserves_custom_scope_for_scoped_write(monkeypatch) -> None:
+    monkeypatch.setenv(MUTATION_TOOLS_ENV, "true")
+    created = Memory(
+        id=uuid4(),
+        memory_type="project_fact",
+        content="Release process is documented.",
+        applies_to={
+            "scope": "release",
+            "memory_scope": "project",
+            "project": "memory-mcp",
+        },
+    )
+
+    class FakeService:
+        def __init__(self, session) -> None:
+            self.session = session
+
+        def create_memory(self, **kwargs):
+            assert kwargs["applies_to"] == created.applies_to
+            return created
+
+    class FakeScope:
+        def __enter__(self):
+            return object()
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+    monkeypatch.setattr(server_module, "MemoryService", FakeService)
+    monkeypatch.setattr(server_module, "session_scope", lambda: FakeScope())
+
+    result = server_module.add_memory(
+        memory_type="project_fact",
+        content="Release process is documented.",
+        applies_to={"scope": "release"},
+        project="memory-mcp",
+    )
+
+    assert result["memory"]["id"] == str(created.id)
+
+
+def test_sensitive_write_echo_requires_sensitive_capability(monkeypatch) -> None:
+    monkeypatch.setenv(MUTATION_TOOLS_ENV, "true")
+    monkeypatch.delenv(SENSITIVE_TOOLS_ENV, raising=False)
+    created = Memory(
+        id=uuid4(),
+        memory_type="personal_fact",
+        content="Private detail.",
+        evidence=[{"kind": "explicit", "text": "Private evidence."}],
+        sensitivity="sensitive",
+    )
+
+    class FakeService:
+        def __init__(self, session) -> None:
+            self.session = session
+
+        def create_memory(self, **kwargs):
+            return created
+
+    class FakeScope:
+        def __enter__(self):
+            return object()
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+    monkeypatch.setattr(server_module, "MemoryService", FakeService)
+    monkeypatch.setattr(server_module, "session_scope", lambda: FakeScope())
+
+    with pytest.raises(PermissionError, match="Sensitive MCP access is disabled"):
+        server_module.add_memory(
+            memory_type="personal_fact",
+            content="Private detail.",
+            sensitivity="sensitive",
+            include_content=True,
+        )
+
+    result = server_module.add_memory(
+        memory_type="personal_fact",
+        content="Private detail.",
+        sensitivity="sensitive",
+    )
+    assert "content" not in result["memory"]
+
+    monkeypatch.setenv(SENSITIVE_TOOLS_ENV, "true")
+    echoed = server_module.add_memory(
+        memory_type="personal_fact",
+        content="Private detail.",
+        sensitivity="sensitive",
+        include_content=True,
+        include_evidence=True,
+    )
+    assert echoed["memory"]["content"] == "Private detail."
+    assert echoed["memory"]["evidence"] == [{"kind": "explicit", "text": "Private evidence."}]
+
+
+def test_component_scope_requires_project_and_component(monkeypatch) -> None:
+    monkeypatch.setenv(MUTATION_TOOLS_ENV, "true")
     with pytest.raises(ValueError, match="project is required"):
         server_module.add_memory(
             memory_type="project_fact",

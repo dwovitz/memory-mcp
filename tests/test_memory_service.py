@@ -46,7 +46,7 @@ def test_service_archive_and_supersede_memory() -> None:
     service = MemoryService(session)
     old_id = uuid4()
     archived_id = uuid4()
-    old_memory = Memory(id=old_id, memory_type="preference", content="Old")
+    old_memory = Memory(id=old_id, memory_type="preference", content="Old", sensitivity="sensitive")
     archived_memory = Memory(id=archived_id, memory_type="note", content="Archive me")
     session.objects[(Memory, old_id)] = old_memory
     session.objects[(Memory, archived_id)] = archived_memory
@@ -61,6 +61,7 @@ def test_service_archive_and_supersede_memory() -> None:
     assert archived.status == "archived"
     assert old_memory.status == "superseded"
     assert replacement.supersedes_memory_id == old_id
+    assert replacement.sensitivity == "sensitive"
 
 
 def test_service_create_scoped_memories() -> None:
@@ -76,7 +77,23 @@ def test_service_create_scoped_memories() -> None:
         "memory-mcp",
         memory_type="project_fact",
         content="Uses PostgreSQL for durable memory storage.",
-        applies_to={"scope": "development"},
+    )
+    workspace_memory = service.create_workspace_memory(
+        "ai",
+        memory_type="project_fact",
+        content="Workspace contains sibling repositories.",
+    )
+    component_memory = service.create_component_memory(
+        project="memory-mcp",
+        component="retrieval",
+        memory_type="project_fact",
+        content="Retrieval ranks memory by text and recency.",
+    )
+    release_memory = service.create_project_memory(
+        "memory-mcp",
+        memory_type="project_fact",
+        content="Release process is documented.",
+        applies_to={"scope": "release"},
     )
 
     assert global_memory.applies_to == {
@@ -85,6 +102,22 @@ def test_service_create_scoped_memories() -> None:
     }
     assert project_memory.applies_to == {
         "scope": "development",
+        "memory_scope": "project",
+        "project": "memory-mcp",
+    }
+    assert workspace_memory.applies_to == {
+        "scope": "development",
+        "memory_scope": "workspace",
+        "workspace": "ai",
+    }
+    assert component_memory.applies_to == {
+        "scope": "development",
+        "memory_scope": "component",
+        "project": "memory-mcp",
+        "component": "retrieval",
+    }
+    assert release_memory.applies_to == {
+        "scope": "release",
         "memory_scope": "project",
         "project": "memory-mcp",
     }

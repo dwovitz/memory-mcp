@@ -21,7 +21,7 @@ memory-mcp = "memory_mcp.main:main"
 
 [project.optional-dependencies]
 dev = [
-    "pytest>=8.0,<9.0",
+    "pytest>=9.0.3,<10.0",
 ]
 
 [tool.hatch.build.targets.wheel]
