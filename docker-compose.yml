@@ -1,6 +1,22 @@
 name: memory-mcp
 
 services:
+  memory-mcp:
+    build:
+      context: .
+    env_file:
+      - .env
+    environment:
+      POSTGRES_HOST: postgres
+      MEMORY_MCP_ENV_FILE: /app/.env
+    volumes:
+      - .:/app
+    depends_on:
+      postgres:
+        condition: service_healthy
+    stdin_open: true
+    tty: true
+
   postgres:
     image: pgvector/pgvector:pg16
     restart: unless-stopped

@@ -10,7 +10,11 @@ from typing import Any, Protocol
 from sqlalchemy.orm import Session
 
 from memory_mcp.models import Memory
-from memory_mcp.retrieval import HybridRetrievalService, MemorySearchResult
+from memory_mcp.retrieval import (
+    HybridRetrievalService,
+    MemorySearchResult,
+    PROJECT_CONTEXT_MEMORY_TYPES,
+)
 from memory_mcp.scopes import (
     COMPONENT_KEY,
     COMPONENT_MEMORY_SCOPE,
@@ -131,7 +135,7 @@ class ContextSynthesisService:
         if _contains_any(normalized, ("project", "code", "coding", "repo", "app", "mcp", "python")):
             return RequestClassification(
                 domain="project",
-                memory_types=("project_fact", "app_knowledge", "coding_preference"),
+                memory_types=PROJECT_CONTEXT_MEMORY_TYPES,
                 include_detail=wants_detail,
                 rationale="Project requests need app, architecture, and coding preference context.",
             )

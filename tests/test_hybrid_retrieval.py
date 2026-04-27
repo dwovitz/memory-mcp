@@ -9,7 +9,7 @@ import pytest
 from sqlalchemy.dialects import postgresql
 
 from memory_mcp.models import Memory
-from memory_mcp.retrieval import HybridRetrievalService
+from memory_mcp.retrieval import HybridRetrievalService, PROJECT_CONTEXT_MEMORY_TYPES
 from memory_mcp.retrieval.service import MemorySearchResult
 
 
@@ -137,6 +137,7 @@ def test_profile_helpers_delegate_to_search_memories(monkeypatch) -> None:
     assert any(call.get("memory_types") == ("medication",) for call in calls)
     assert any(call.get("tags") == ("liked",) for call in calls)
     assert any(call.get("tags") == ("disliked",) for call in calls)
+    assert any(call.get("memory_types") == PROJECT_CONTEXT_MEMORY_TYPES for call in calls)
     assert any(
         call.get("applies_to") == {
             "memory_scope": "project",
@@ -236,6 +237,62 @@ def test_search_hierarchical_memories_merges_scopes_with_priority_and_caps(monke
     assert calls[3]["applies_to"] == {
         "scope": "development",
         "memory_scope": "global",
+    }
+
+
+def test_project_hierarchy_includes_child_component_memories(monkeypatch) -> None:
+    service = HybridRetrievalService(FakeSession())
+    calls = []
+    component_memory = Memory(
+        id=uuid4(),
+        memory_type="component_summary",
+        content="API routes use route-local Zod schemas.",
+        summary="API routes use route-local Zod schemas.",
+        applies_to={
+            "memory_scope": "component",
+            "workspace": "ai",
+            "project": "outline",
+            "component": "api",
+        },
+        created_at=datetime(2026, 4, 24, tzinfo=timezone.utc),
+    )
+    project_memory = Memory(
+        id=uuid4(),
+        memory_type="dependency",
+        content="Outline uses React and Koa.",
+        summary="Outline uses React and Koa.",
+        applies_to={"memory_scope": "project", "workspace": "ai", "project": "outline"},
+        created_at=datetime(2026, 4, 23, tzinfo=timezone.utc),
+    )
+
+    def fake_search_memories(**kwargs):
+        calls.append(kwargs)
+        applies_to = kwargs.get("applies_to") or {}
+        if applies_to.get("memory_scope") == "component":
+            return [MemorySearchResult(component_memory, 0.2, 0.0, 0.1)]
+        if applies_to.get("memory_scope") == "project":
+            return [MemorySearchResult(project_memory, 0.1, 0.0, 0.1)]
+        return []
+
+    monkeypatch.setattr(service, "search_memories", fake_search_memories)
+
+    results = service.search_hierarchical_memories(
+        workspace="ai",
+        project="outline",
+        memory_types=PROJECT_CONTEXT_MEMORY_TYPES,
+        limit=5,
+    )
+
+    assert [result.memory.id for result in results] == [component_memory.id, project_memory.id]
+    assert calls[0]["applies_to"] == {
+        "memory_scope": "component",
+        "workspace": "ai",
+        "project": "outline",
+    }
+    assert calls[1]["applies_to"] == {
+        "memory_scope": "project",
+        "workspace": "ai",
+        "project": "outline",
     }
 
 

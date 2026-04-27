@@ -5,7 +5,7 @@ from __future__ import annotations
 from uuid import uuid4
 
 from memory_mcp.models import Memory
-from memory_mcp.retrieval import MemorySearchResult
+from memory_mcp.retrieval import MemorySearchResult, PROJECT_CONTEXT_MEMORY_TYPES
 from memory_mcp.services import ContextSynthesisService
 
 
@@ -62,10 +62,30 @@ def test_classifies_project_request_and_excludes_unrelated_domains() -> None:
 
     call = retriever.calls[0]
     assert packet.classification.domain == "project"
-    assert call["memory_types"] == ("project_fact", "app_knowledge", "coding_preference")
+    assert call["memory_types"] == PROJECT_CONTEXT_MEMORY_TYPES
     assert call["scope"] is None
     assert "medication" not in call["memory_types"]
     assert "entertainment_preference" not in call["memory_types"]
+
+
+def test_project_request_includes_rich_project_context_types() -> None:
+    retriever = FakeRetriever([])
+    service = ContextSynthesisService(retriever=retriever)
+
+    service.synthesize_context("Repo outline for orienting a coding agent to backend API changes.")
+
+    call = retriever.calls[0]
+    assert {
+        "component_summary",
+        "architecture_decision",
+        "project_rule",
+        "workflow_location",
+        "dependency",
+        "external_reference",
+    }.issubset(call["memory_types"])
+    assert "medication" not in call["memory_types"]
+    assert "entertainment_preference" not in call["memory_types"]
+    assert "inferred_preference" not in call["memory_types"]
 
 
 def test_synthesis_prefers_summary_unless_detail_requested() -> None:
@@ -104,6 +124,20 @@ def test_output_groups_preferences_facts_and_episodic_context() -> None:
     assert "## Preferences" in rendered
     assert "## Facts" in rendered
     assert "## Episodic Context" in rendered
+
+
+def test_synthesized_packet_can_include_rich_project_memory_type() -> None:
+    architecture_memory = memory(
+        "component_summary",
+        summary="The web client uses React Router, MobX stores, and lazy-loaded routes.",
+        content="Outline app routes are split by auth state and lazy loaded through React Router.",
+    )
+    retriever = FakeRetriever([result(architecture_memory)])
+    service = ContextSynthesisService(retriever=retriever)
+
+    packet = service.synthesize_context("Repo outline for orienting a coding agent to Outline.")
+
+    assert packet.facts == ["The web client uses React Router, MobX stores, and lazy-loaded routes."]
 
 
 def test_optional_evidence_and_token_reduction() -> None:
@@ -157,7 +191,7 @@ def test_project_scoped_synthesis_uses_project_and_global_search() -> None:
     call = retriever.calls[0]
     assert call["project"] == "memory-mcp"
     assert call["include_global"] is True
-    assert call["memory_types"] == ("project_fact", "app_knowledge", "coding_preference")
+    assert call["memory_types"] == PROJECT_CONTEXT_MEMORY_TYPES
 
 
 def test_component_scoped_synthesis_passes_workspace_and_component() -> None:

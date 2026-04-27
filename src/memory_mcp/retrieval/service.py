@@ -63,6 +63,19 @@ class VectorSearchPlan:
     preferred_index: str = "hnsw"
 
 
+PROJECT_CONTEXT_MEMORY_TYPES = (
+    "project_fact",
+    "app_knowledge",
+    "coding_preference",
+    "dependency",
+    "project_rule",
+    "workflow_location",
+    "component_summary",
+    "architecture_decision",
+    "external_reference",
+)
+
+
 class HybridRetrievalService:
     """Search and profile helpers built from structured filters and full text."""
 
@@ -481,7 +494,7 @@ class HybridRetrievalService:
             project=project,
             component=component,
             topic=topic,
-            memory_types=("project_fact", "app_knowledge", "coding_preference"),
+            memory_types=PROJECT_CONTEXT_MEMORY_TYPES,
             statuses=("active",),
             scope="development",
             limit=limit,
@@ -644,6 +657,14 @@ def _hierarchy_layers(
             layer["workspace"] = workspace
         if topic:
             layer["topic"] = topic
+        layers.append(layer)
+    elif project:
+        layer = {
+            "memory_scope": COMPONENT_MEMORY_SCOPE,
+            "project": project,
+        }
+        if workspace:
+            layer["workspace"] = workspace
         layers.append(layer)
     if project:
         layer = {
