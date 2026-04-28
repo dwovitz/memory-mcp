@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, field
 from decimal import Decimal
 from typing import Any, Protocol
@@ -37,6 +37,105 @@ class MemoryRetriever(Protocol):
         """Search memories using structured and lexical filters."""
 
 
+PROJECT_CONTEXT_REQUEST_TERMS = (
+    "api",
+    "app",
+    "architecture",
+    "architectural",
+    "auth",
+    "authorization",
+    "backend",
+    "code",
+    "coding",
+    "correctness",
+    "database",
+    "deployment",
+    "endpoint",
+    "frontend",
+    "migration",
+    "mcp",
+    "performance",
+    "persistence",
+    "project",
+    "python",
+    "repo",
+    "repository",
+    "security",
+    "service",
+    "services",
+    "test",
+    "tests",
+)
+BROADER_PROJECT_CONTEXT_TERMS = (
+    "architecture",
+    "architectural",
+    "correctness",
+    "risk",
+    "risks",
+    "plan",
+    "planning",
+    "security",
+    "authorization",
+    "performance",
+    "test",
+    "tests",
+    "validation",
+)
+WEAK_PROJECT_PACKET_TOKEN_THRESHOLD = 24
+FOCUSED_VERIFICATION_BUDGET_TOKENS = 2_000
+IMPLEMENTATION_SOURCE_BUDGET_TOKENS = 4_000
+NO_SOURCE_READ_BUDGET_TOKENS = 0
+SOURCE_READ_LIMITS_BY_POLICY = {
+    "none": {
+        "max_files_before_edit": 0,
+        "max_snippets": 0,
+        "max_lines_per_snippet": 0,
+        "path_enum_allowed": False,
+        "source_content_allowed": False,
+        "broad_read_disallowed": True,
+    },
+    "path_enum_only": {
+        "max_files_before_edit": 0,
+        "max_snippets": 0,
+        "max_lines_per_snippet": 0,
+        "path_enum_allowed": True,
+        "source_content_allowed": False,
+        "broad_read_disallowed": True,
+    },
+    "focused_snippets": {
+        "max_files_before_edit": 4,
+        "max_snippets": 6,
+        "max_lines_per_snippet": 40,
+        "path_enum_allowed": True,
+        "source_content_allowed": True,
+        "broad_read_disallowed": True,
+    },
+    "implementation_required": {
+        "max_files_before_edit": 8,
+        "max_snippets": 10,
+        "max_lines_per_snippet": 60,
+        "path_enum_allowed": True,
+        "source_content_allowed": True,
+        "broad_read_disallowed": True,
+    },
+}
+SOURCE_READ_OVER_BUDGET_EXCEPTION = (
+    "Only exceed this budget after naming the missing fact, the file or symbol likely to contain it, "
+    "and why the implementation or validation cannot proceed without that read."
+)
+FALLBACK_SEARCH_EXAMPLES = [
+    "git grep -l <term>",
+    "git ls-files with targeted filtering",
+    "Select-String only over known candidate files",
+]
+DEGRADED_SEARCH_GUIDANCE = (
+    "If fast search such as rg is unavailable, run path-only search first before reading snippets "
+    "(for example: git grep -l <term>, git ls-files with targeted filtering, or Select-String only "
+    "over known candidate files). Broad recursive source-output dumps are disallowed as a substitute "
+    "for search. After path-only search, read only bounded snippets from selected files."
+)
+
+
 @dataclass(frozen=True)
 class RequestClassification:
     """Heuristic request classification used to constrain retrieval."""
@@ -62,6 +161,7 @@ class ContextPacket:
     before_token_estimate: int = 0
     after_token_estimate: int = 0
     token_budget: int | None = None
+    diagnostics: dict[str, Any] = field(default_factory=dict)
 
     @property
     def token_reduction_percent(self) -> float:
@@ -75,6 +175,9 @@ class ContextPacket:
             "# Context Packet",
             f"Request domain: {self.classification.domain}",
         ]
+        context_quality = self.diagnostics.get("context_quality")
+        if context_quality:
+            sections.append(f"Context quality: {context_quality}")
         if self.preferences:
             sections.extend(["", "## Preferences", *_bullet_lines(self.preferences)])
         if self.facts:
@@ -83,6 +186,12 @@ class ContextPacket:
             sections.extend(["", "## Episodic Context", *_bullet_lines(self.episodic_context)])
         if self.evidence:
             sections.extend(["", "## Evidence", *_bullet_lines(self.evidence)])
+        warnings = self.diagnostics.get("warnings") or []
+        if warnings:
+            sections.extend(["", "## Warnings", *_bullet_lines(warnings)])
+        source_guidance = _source_guidance_lines(self.diagnostics)
+        if source_guidance:
+            sections.extend(["", "## Source Read Guidance", *_bullet_lines(source_guidance)])
         sections.extend(
             [
                 "",
@@ -116,6 +225,13 @@ class ContextSynthesisService:
             for word in ("detail", "details", "evidence", "why", "exact", "dose", "dosage", "full")
         )
 
+        if _looks_like_project_context_request(normalized) and _is_implementation_project_request(normalized):
+            return RequestClassification(
+                domain="project",
+                memory_types=PROJECT_CONTEXT_MEMORY_TYPES,
+                include_detail=wants_detail,
+                rationale="Implementation requests with project terms need coding context even when they mention domain data.",
+            )
         if _contains_any(normalized, ("medication", "medicine", "dose", "allergy", "health")):
             return RequestClassification(
                 domain="health",
@@ -132,7 +248,7 @@ class ContextSynthesisService:
                 include_detail=wants_detail,
                 rationale="Entertainment requests should exclude project, device, and medication domains.",
             )
-        if _contains_any(normalized, ("project", "code", "coding", "repo", "app", "mcp", "python")):
+        if _looks_like_project_context_request(normalized):
             return RequestClassification(
                 domain="project",
                 memory_types=PROJECT_CONTEXT_MEMORY_TYPES,
@@ -179,6 +295,13 @@ class ContextSynthesisService:
         max_tokens: int | None = None,
     ) -> ContextPacket:
         classification = self.classify_request(request)
+        if classification.domain == "general" and (project or component or scope_path):
+            classification = RequestClassification(
+                domain="project",
+                memory_types=PROJECT_CONTEXT_MEMORY_TYPES,
+                include_detail=classification.include_detail,
+                rationale="Explicit project scope indicates project context retrieval.",
+            )
         search_kwargs = {
             "text_query": request,
             "memory_types": classification.memory_types,
@@ -200,6 +323,44 @@ class ContextSynthesisService:
             include_inherited=include_inherited,
             **search_kwargs,
         )
+        fallback_attempts: list[dict[str, Any]] = []
+        fallback_reason = _component_fallback_reason(
+            request,
+            results,
+            project=project,
+            component=component,
+        )
+        if fallback_reason:
+            fallback_results = self._search_relevant_memories(
+                workspace=workspace,
+                project=project,
+                component=None,
+                topic=None,
+                include_global=include_global,
+                scope_path=scope_path,
+                include_inherited=include_inherited,
+                **search_kwargs,
+            )
+            primary_first = fallback_reason == "broad_project_request" and _has_project_scoped_memory(
+                [result.memory for result in results],
+                project,
+            )
+            merged_results = _merge_unique_results(
+                results if primary_first else fallback_results,
+                fallback_results if primary_first else results,
+                limit=max_memories,
+            )
+            fallback_attempts.append(
+                {
+                    "reason": fallback_reason,
+                    "from_component": component,
+                    "to_scope": "project",
+                    "result_count": len(fallback_results),
+                    "accepted": _result_ids(merged_results) != _result_ids(results),
+                }
+            )
+            if fallback_attempts[-1]["accepted"]:
+                results = merged_results
         memories = [result.memory for result in results]
 
         preferences: list[str] = []
@@ -233,6 +394,15 @@ class ContextSynthesisService:
                     token_parts.append(evidence_line)
 
         after_text = "\n".join([*preferences, *facts, *episodic_context, *evidence_items])
+        after_token_estimate = _estimate_tokens(after_text)
+        diagnostics = _packet_diagnostics(
+            memories,
+            request=request,
+            project=project,
+            component=component,
+            fallback_attempts=fallback_attempts,
+            after_token_estimate=after_token_estimate,
+        )
         return ContextPacket(
             request=request,
             classification=classification,
@@ -241,8 +411,9 @@ class ContextSynthesisService:
             episodic_context=episodic_context,
             evidence=evidence_items,
             before_token_estimate=_estimate_raw_tokens(memories),
-            after_token_estimate=_estimate_tokens(after_text),
+            after_token_estimate=after_token_estimate,
             token_budget=max_tokens,
+            diagnostics=diagnostics,
         )
 
     def _search_relevant_memories(
@@ -419,6 +590,343 @@ def _bullet_lines(items: Sequence[str]) -> list[str]:
 
 def _contains_any(text: str, words: Sequence[str]) -> bool:
     return any(word in text for word in words)
+
+
+def _looks_like_project_context_request(text: str) -> bool:
+    return _contains_any(text, PROJECT_CONTEXT_REQUEST_TERMS)
+
+
+def _is_broad_project_context_request(text: str) -> bool:
+    return _contains_any(text.lower(), BROADER_PROJECT_CONTEXT_TERMS)
+
+
+def _component_fallback_reason(
+    request: str,
+    results: Sequence[MemorySearchResult],
+    *,
+    project: str | None,
+    component: str | None,
+) -> str | None:
+    if not project or not component:
+        return None
+    if _is_broad_project_context_request(request):
+        return "broad_project_request"
+    memories = [result.memory for result in results]
+    if not _has_project_scoped_memory(memories, project):
+        return "weak_component_packet"
+    if not _has_direct_component_memory(memories, project=project, component=component):
+        return "missing_component_match"
+    return None
+
+
+def _packet_diagnostics(
+    memories: Sequence[Memory],
+    *,
+    request: str,
+    project: str | None,
+    component: str | None,
+    fallback_attempts: Sequence[dict[str, Any]],
+    after_token_estimate: int,
+) -> dict[str, Any]:
+    warnings: list[str] = []
+    has_project_scoped_facts = _has_project_scoped_memory(memories, project)
+    has_component_scoped_facts = _has_any_component_memory(memories, project=project)
+    has_direct_component_facts = _has_direct_component_memory(
+        memories,
+        project=project,
+        component=component,
+    )
+    only_workspace_or_global = bool(memories) and not has_project_scoped_facts
+    broad_project_request = _is_broad_project_context_request(request)
+    implementation_request = _is_implementation_project_request(request)
+    if not memories:
+        warnings.append("No memories matched this request.")
+    if project and not has_project_scoped_facts:
+        warnings.append(
+            f"No project-scoped memories matched project '{project}'; context may be incomplete."
+        )
+    if component and not has_direct_component_facts:
+        warnings.append(
+            f"No direct memories matched component '{component}'; project-scope fallback may be more reliable."
+        )
+    if project and after_token_estimate < WEAK_PROJECT_PACKET_TOKEN_THRESHOLD:
+        warnings.append("Rendered packet is unusually small for a project request.")
+    if any(attempt.get("accepted") for attempt in fallback_attempts):
+        warnings.append("Fallback broadened retrieval from component scope to project scope.")
+
+    context_quality = "strong"
+    if not memories:
+        context_quality = "miss"
+    elif project and not has_project_scoped_facts:
+        context_quality = "weak"
+    elif project and after_token_estimate < WEAK_PROJECT_PACKET_TOKEN_THRESHOLD:
+        context_quality = "weak"
+    elif component and not has_direct_component_facts:
+        context_quality = "usable"
+    elif warnings:
+        context_quality = "usable"
+
+    source_read_policy, suggested_next_action, source_read_budget_tokens = _source_read_decision(
+        context_quality=context_quality,
+        broad_project_request=broad_project_request,
+        implementation_request=implementation_request,
+    )
+    source_read_limits = _source_read_limits(
+        source_read_policy,
+        source_read_budget_tokens=source_read_budget_tokens,
+    )
+
+    return {
+        "context_quality": context_quality,
+        "warnings": warnings,
+        "fallback_attempts": list(fallback_attempts),
+        "matched_scopes": _unique_ordered(_format_memory_scope(memory) for memory in memories),
+        "matched_memory_types": _unique_ordered(memory.memory_type for memory in memories),
+        "matched_scope_counts": _counts(_format_memory_scope(memory) for memory in memories),
+        "matched_memory_type_counts": _counts(memory.memory_type for memory in memories),
+        "has_project_scoped_facts": has_project_scoped_facts,
+        "has_component_scoped_facts": has_component_scoped_facts,
+        "has_direct_component_facts": has_direct_component_facts,
+        "only_workspace_or_global_facts": only_workspace_or_global,
+        "broad_project_request": broad_project_request,
+        "implementation_request": implementation_request,
+        "suggested_next_action": suggested_next_action,
+        "source_read_policy": source_read_policy,
+        "source_read_budget_tokens": source_read_budget_tokens,
+        "source_read_limits": source_read_limits,
+        "verification_focus": _verification_focus_examples(request),
+    }
+
+
+def _has_project_scoped_memory(memories: Sequence[Memory], project: str | None) -> bool:
+    if not project:
+        return False
+    for memory in memories:
+        applies_to = memory.applies_to or {}
+        if applies_to.get(PROJECT_KEY) == project and applies_to.get("memory_scope") in {
+            PROJECT_MEMORY_SCOPE,
+            COMPONENT_MEMORY_SCOPE,
+        }:
+            return True
+        scope_path = applies_to.get(SCOPE_PATH_KEY)
+        if isinstance(scope_path, Sequence) and not isinstance(scope_path, str):
+            if f"project:{project}" in {str(part) for part in scope_path}:
+                return True
+    return False
+
+
+def _has_direct_component_memory(
+    memories: Sequence[Memory],
+    *,
+    project: str | None,
+    component: str | None,
+) -> bool:
+    if not component:
+        return False
+    for memory in memories:
+        applies_to = memory.applies_to or {}
+        if applies_to.get("memory_scope") != COMPONENT_MEMORY_SCOPE:
+            continue
+        if applies_to.get(COMPONENT_KEY) != component:
+            continue
+        if project and applies_to.get(PROJECT_KEY) != project:
+            continue
+        return True
+    return False
+
+
+def _has_any_component_memory(
+    memories: Sequence[Memory],
+    *,
+    project: str | None,
+) -> bool:
+    for memory in memories:
+        applies_to = memory.applies_to or {}
+        if applies_to.get("memory_scope") != COMPONENT_MEMORY_SCOPE:
+            continue
+        if project and applies_to.get(PROJECT_KEY) != project:
+            continue
+        return True
+    return False
+
+
+def _format_memory_scope(memory: Memory) -> str:
+    applies_to = memory.applies_to or {}
+    memory_scope = applies_to.get("memory_scope")
+    if memory_scope == COMPONENT_MEMORY_SCOPE:
+        project = applies_to.get(PROJECT_KEY, "*")
+        component = applies_to.get(COMPONENT_KEY, "*")
+        return f"component:{project}/{component}"
+    if memory_scope == PROJECT_MEMORY_SCOPE:
+        return f"project:{applies_to.get(PROJECT_KEY, '*')}"
+    if memory_scope == WORKSPACE_MEMORY_SCOPE:
+        return f"workspace:{applies_to.get(WORKSPACE_KEY, '*')}"
+    if memory_scope == GLOBAL_MEMORY_SCOPE:
+        return "global"
+    if SCOPE_PATH_KEY in applies_to:
+        return "scope_path:" + "/".join(str(part) for part in applies_to[SCOPE_PATH_KEY])
+    return "unscoped"
+
+
+def _unique_ordered(items: Iterable[str]) -> list[str]:
+    unique: list[str] = []
+    seen: set[str] = set()
+    for item in items:
+        if item in seen:
+            continue
+        seen.add(item)
+        unique.append(item)
+    return unique
+
+
+def _counts(items: Iterable[str]) -> dict[str, int]:
+    counts: dict[str, int] = {}
+    for item in items:
+        counts[item] = counts.get(item, 0) + 1
+    return counts
+
+
+def _merge_unique_results(
+    primary: Sequence[MemorySearchResult],
+    secondary: Sequence[MemorySearchResult],
+    *,
+    limit: int,
+) -> list[MemorySearchResult]:
+    seen: set[Any] = set()
+    merged: list[MemorySearchResult] = []
+    for result in (*primary, *secondary):
+        memory_id = result.memory.id
+        if memory_id in seen:
+            continue
+        seen.add(memory_id)
+        merged.append(result)
+        if len(merged) >= limit:
+            break
+    return merged
+
+
+def _result_ids(results: Sequence[MemorySearchResult]) -> list[Any]:
+    return [result.memory.id for result in results]
+
+
+def _is_implementation_project_request(text: str) -> bool:
+    return _contains_any(
+        text.lower(),
+        (
+            "add",
+            "change",
+            "changing",
+            "edit",
+            "editing",
+            "fix",
+            "implement",
+            "implementation",
+            "modify",
+            "modifying",
+            "patch",
+            "refactor",
+        ),
+    )
+
+
+def _source_read_decision(
+    *,
+    context_quality: str,
+    broad_project_request: bool,
+    implementation_request: bool,
+) -> tuple[str, str, int]:
+    if context_quality in {"miss", "weak"}:
+        return "none", "mark_weak_context", NO_SOURCE_READ_BUDGET_TOKENS
+    if broad_project_request:
+        if context_quality == "strong":
+            return "path_enum_only", "answer_from_packet", NO_SOURCE_READ_BUDGET_TOKENS
+        return "focused_snippets", "verify_narrowly", FOCUSED_VERIFICATION_BUDGET_TOKENS
+    if implementation_request:
+        return "implementation_required", "inspect_budget_then_edit", IMPLEMENTATION_SOURCE_BUDGET_TOKENS
+    if context_quality == "usable":
+        return "focused_snippets", "verify_narrowly", FOCUSED_VERIFICATION_BUDGET_TOKENS
+    return "path_enum_only", "answer_from_packet", NO_SOURCE_READ_BUDGET_TOKENS
+
+
+def _source_read_limits(
+    source_read_policy: str,
+    *,
+    source_read_budget_tokens: int,
+) -> dict[str, Any]:
+    limits = dict(SOURCE_READ_LIMITS_BY_POLICY.get(source_read_policy, SOURCE_READ_LIMITS_BY_POLICY["none"]))
+    limits["source_read_budget_tokens"] = source_read_budget_tokens
+    limits["degraded_search_guidance"] = DEGRADED_SEARCH_GUIDANCE
+    limits["path_only_search_first"] = True
+    limits["broad_fallback_search_disallowed"] = True
+    limits["fallback_search_examples"] = list(FALLBACK_SEARCH_EXAMPLES)
+    limits["over_budget_exception"] = SOURCE_READ_OVER_BUDGET_EXCEPTION
+    return limits
+
+
+def _verification_focus_examples(request: str) -> list[str]:
+    text = request.lower()
+    if _contains_any(text, ("test", "tests", "validation")):
+        return [
+            "test path names",
+            "fixture or helper signatures",
+            "small assertion excerpts from one or two targeted tests",
+        ]
+    if _contains_any(text, ("auth", "authorization", "security", "endpoint", "backend", "api")):
+        return [
+            "route or endpoint definitions",
+            "auth middleware and permission checks",
+            "small service/model contract snippets",
+        ]
+    if _contains_any(text, ("architecture", "risk", "risks", "performance")):
+        return [
+            "module path enumeration",
+            "public interfaces for implicated services",
+            "small excerpts around documented boundaries",
+        ]
+    return [
+        "path enumeration",
+        "small excerpts from the directly implicated files",
+    ]
+
+
+def _source_guidance_lines(diagnostics: dict[str, Any]) -> list[str]:
+    suggested_next_action = diagnostics.get("suggested_next_action")
+    source_read_policy = diagnostics.get("source_read_policy")
+    if not suggested_next_action or not source_read_policy:
+        return []
+    lines = [
+        f"Suggested next action: {suggested_next_action}.",
+        f"Source read policy: {source_read_policy}.",
+        f"Recommended post-packet source budget: {diagnostics.get('source_read_budget_tokens', 0)} tokens.",
+    ]
+    limits = diagnostics.get("source_read_limits") or {}
+    if limits:
+        lines.append(
+            "Source read limits: "
+            f"max files before edit {limits.get('max_files_before_edit', 0)}, "
+            f"max snippets {limits.get('max_snippets', 0)}, "
+            f"max lines per snippet {limits.get('max_lines_per_snippet', 0)}, "
+            f"path enumeration allowed {str(limits.get('path_enum_allowed', False)).lower()}, "
+            f"broad reads disallowed {str(limits.get('broad_read_disallowed', True)).lower()}."
+        )
+        if source_read_policy == "implementation_required":
+            lines.append(
+                "Implementation workflow: enumerate likely paths, inspect only direct entry points, "
+                "edit once the likely files are identified, and defer broader reading until verification."
+            )
+        guidance = limits.get("degraded_search_guidance")
+        if guidance:
+            lines.append(str(guidance))
+        examples = limits.get("fallback_search_examples") or []
+        if examples:
+            lines.append("Fallback search examples: " + "; ".join(str(item) for item in examples) + ".")
+        exception = limits.get("over_budget_exception")
+        if exception:
+            lines.append(str(exception))
+    focus = diagnostics.get("verification_focus") or []
+    if focus and source_read_policy in {"focused_snippets", "implementation_required"}:
+        lines.append("Verification focus: " + "; ".join(str(item) for item in focus) + ".")
+    return lines
 
 
 def _merge_scoped_results(

@@ -7,13 +7,16 @@ from datetime import datetime
 from decimal import Decimal
 import json
 import os
+from pathlib import Path
 from typing import Any
 from uuid import UUID
 
+from dotenv import load_dotenv
 from mcp.server.fastmcp import FastMCP
+from sqlalchemy import func, select
 
 from memory_mcp.db import session_scope
-from memory_mcp.models import Memory
+from memory_mcp.models import Entity, Memory, MemoryTag, Relationship
 from memory_mcp.pruning import PruningService
 from memory_mcp.retrieval import HybridRetrievalService, MemorySearchResult
 from memory_mcp.scopes import (
@@ -28,6 +31,16 @@ from memory_mcp.scopes import (
     with_scope_path,
 )
 from memory_mcp.services import ContextPacket, ContextSynthesisService, MemoryService
+
+PROJECT_ROOT = Path(__file__).resolve().parents[3]
+
+
+def _load_runtime_env() -> None:
+    env_file = Path(os.getenv("MEMORY_MCP_ENV_FILE", PROJECT_ROOT / ".env"))
+    load_dotenv(dotenv_path=env_file, override=False)
+
+
+_load_runtime_env()
 
 mcp = FastMCP("memory-mcp")
 
@@ -53,6 +66,13 @@ MAX_SCOPE_PATH_PARTS = 32
 MAX_SCOPE_PATH_PART_CHARS = 200
 MUTATION_TOOLS_ENV = "MEMORY_MCP_ENABLE_MUTATION_TOOLS"
 SENSITIVE_TOOLS_ENV = "MEMORY_MCP_ENABLE_SENSITIVE_TOOLS"
+CACHE_NAMESPACE = "memory-data"
+CACHE_SOURCE_TABLES = (
+    ("entities", Entity),
+    ("memories", Memory),
+    ("memory_tags", MemoryTag),
+    ("relationships", Relationship),
+)
 
 
 @mcp.tool()
@@ -162,6 +182,7 @@ def add_memory(
                 include_evidence=include_evidence,
             ),
             "tags": _tags_to_dict(created_tags),
+            "cache": _cache_metadata(_cache_state_from_session(session), hit=False),
         }
 
 
@@ -178,6 +199,7 @@ def archive_memory(
         memory = service.archive_memory(_parse_required_uuid(memory_id, "memory_id"))
         return {
             "memory": _memory_to_dict(memory, include_evidence=include_evidence),
+            "cache": _cache_metadata(_cache_state_from_session(session), hit=False),
         }
 
 
@@ -291,6 +313,17 @@ def supersede_memory(
                 include_evidence=include_evidence,
             ),
             "tags": _tags_to_dict(created_tags),
+            "cache": _cache_metadata(_cache_state_from_session(session), hit=False),
+        }
+
+
+@mcp.tool()
+def get_memory_cache_state() -> dict[str, Any]:
+    """Return a cheap version token clients can use to validate cached memory reads."""
+
+    with session_scope() as session:
+        return {
+            "cache": _cache_metadata(_cache_state_from_session(session), hit=False),
         }
 
 
@@ -312,6 +345,7 @@ def search_memory(
     include_evidence: bool = False,
     include_sensitive: bool = False,
     include_global: bool = True,
+    if_cache_version: str | None = None,
 ) -> dict[str, Any]:
     """Search memories with structured filters, tags, full text, confidence, and scope."""
 
@@ -327,8 +361,12 @@ def search_memory(
     limit = _bounded_int("limit", limit, minimum=1, maximum=MAX_SEARCH_LIMIT)
     min_confidence = None if min_confidence is None else _validate_confidence(min_confidence)
     sensitivities = _allowed_sensitivities(include_sensitive)
+    if_cache_version = _validate_cache_version(if_cache_version)
 
     with session_scope() as session:
+        cache_state = _cache_state_from_session(session)
+        if _cache_is_fresh(cache_state, if_cache_version):
+            return _cached_response(cache_state)
         retrieval = HybridRetrievalService(session)
         if scope_path:
             results = retrieval.search_scope_path_memories(
@@ -380,6 +418,7 @@ def search_memory(
             "include_inherited": include_inherited,
             "count": len(results),
             "results": [_memory_result_to_dict(result, include_evidence=include_evidence) for result in results],
+            "cache": _cache_metadata(cache_state, hit=False),
         }
 
 
@@ -397,6 +436,7 @@ def get_context_packet(
     scope_path: list[str] | None = None,
     include_inherited: bool = True,
     include_global: bool = True,
+    if_cache_version: str | None = None,
 ) -> dict[str, Any]:
     """Generate a compact LLM-ready context packet for a request."""
 
@@ -418,7 +458,11 @@ def get_context_packet(
         minimum=100,
         maximum=MAX_CONTEXT_TOKENS,
     )
+    if_cache_version = _validate_cache_version(if_cache_version)
     with session_scope() as session:
+        cache_state = _cache_state_from_session(session)
+        if _cache_is_fresh(cache_state, if_cache_version):
+            return _cached_response(cache_state)
         packet = ContextSynthesisService(session).synthesize_context(
             request,
             include_evidence=include_evidence,
@@ -433,7 +477,9 @@ def get_context_packet(
             include_global=include_global,
             max_tokens=max_tokens,
         )
-        return _context_packet_to_dict(packet)
+        data = _context_packet_to_dict(packet)
+        data["cache"] = _cache_metadata(cache_state, hit=False)
+        return data
 
 
 @mcp.tool()
@@ -448,6 +494,7 @@ def list_preferences(
     limit: int = 20,
     include_sensitive: bool = False,
     include_global: bool = True,
+    if_cache_version: str | None = None,
 ) -> dict[str, Any]:
     """List active preference memories, optionally scoped by domain or person."""
 
@@ -459,8 +506,12 @@ def list_preferences(
     memory_types = _preference_memory_types(domain)
     applies_to = {"person_id": person_id} if person_id else None
     scope = _domain_scope(domain)
+    if_cache_version = _validate_cache_version(if_cache_version)
 
     with session_scope() as session:
+        cache_state = _cache_state_from_session(session)
+        if _cache_is_fresh(cache_state, if_cache_version):
+            return _cached_response(cache_state)
         retrieval = HybridRetrievalService(session)
         if scope_path:
             results = retrieval.search_scope_path_memories(
@@ -501,6 +552,7 @@ def list_preferences(
             "include_inherited": include_inherited,
             "count": len(results),
             "preferences": [_memory_result_to_dict(result) for result in results],
+            "cache": _cache_metadata(cache_state, hit=False),
         }
 
 
@@ -510,13 +562,18 @@ def list_liked_media(
     person_id: str | None = None,
     limit: int = 20,
     include_sensitive: bool = False,
+    if_cache_version: str | None = None,
 ) -> dict[str, Any]:
     """List liked media memories, optionally filtered by genre and person."""
 
     genre = _validate_text("genre", genre, max_chars=200)
     limit = _bounded_int("limit", limit, minimum=1, maximum=MAX_SEARCH_LIMIT)
     sensitivities = _allowed_sensitivities(include_sensitive)
+    if_cache_version = _validate_cache_version(if_cache_version)
     with session_scope() as session:
+        cache_state = _cache_state_from_session(session)
+        if _cache_is_fresh(cache_state, if_cache_version):
+            return _cached_response(cache_state)
         retrieval = HybridRetrievalService(session)
         if genre:
             memories = retrieval.list_liked_items_by_genre(
@@ -538,6 +595,7 @@ def list_liked_media(
             "genre": genre,
             "count": len(memories),
             "items": [_memory_to_dict(memory) for memory in memories],
+            "cache": _cache_metadata(cache_state, hit=False),
         }
 
 
@@ -547,13 +605,18 @@ def list_disliked_media(
     person_id: str | None = None,
     limit: int = 20,
     include_sensitive: bool = False,
+    if_cache_version: str | None = None,
 ) -> dict[str, Any]:
     """List disliked media memories, optionally filtered by genre and person."""
 
     genre = _validate_text("genre", genre, max_chars=200)
     limit = _bounded_int("limit", limit, minimum=1, maximum=MAX_SEARCH_LIMIT)
     sensitivities = _allowed_sensitivities(include_sensitive)
+    if_cache_version = _validate_cache_version(if_cache_version)
     with session_scope() as session:
+        cache_state = _cache_state_from_session(session)
+        if _cache_is_fresh(cache_state, if_cache_version):
+            return _cached_response(cache_state)
         retrieval = HybridRetrievalService(session)
         if genre:
             memories = retrieval.list_disliked_items_by_genre(
@@ -575,6 +638,7 @@ def list_disliked_media(
             "genre": genre,
             "count": len(memories),
             "items": [_memory_to_dict(memory) for memory in memories],
+            "cache": _cache_metadata(cache_state, hit=False),
         }
 
 
@@ -584,10 +648,15 @@ def list_medications_for_person(
     include_archived: bool = False,
     include_sensitive: bool = False,
     include_evidence: bool = False,
+    if_cache_version: str | None = None,
 ) -> dict[str, Any]:
     """List medication memories for a person UUID."""
 
+    if_cache_version = _validate_cache_version(if_cache_version)
     with session_scope() as session:
+        cache_state = _cache_state_from_session(session)
+        if _cache_is_fresh(cache_state, if_cache_version):
+            return _cached_response(cache_state)
         retrieval = HybridRetrievalService(session)
         memories = retrieval.get_medications_for_person(
             _parse_required_uuid(person_id, "person_id"),
@@ -602,6 +671,7 @@ def list_medications_for_person(
             "note": None
             if include_sensitive
             else "Medication memories marked sensitive/private are omitted unless include_sensitive is true.",
+            "cache": _cache_metadata(cache_state, hit=False),
         }
 
 
@@ -619,6 +689,7 @@ def summarize_domain_profile(
     include_evidence: bool = False,
     include_sensitive: bool = False,
     include_global: bool = True,
+    if_cache_version: str | None = None,
 ) -> dict[str, Any]:
     """Summarize a domain profile as a compact context packet."""
 
@@ -633,6 +704,7 @@ def summarize_domain_profile(
         minimum=100,
         maximum=MAX_CONTEXT_TOKENS,
     )
+    if_cache_version = _validate_cache_version(if_cache_version)
     request = _domain_profile_request(
         domain,
         person_id=person_id,
@@ -643,6 +715,9 @@ def summarize_domain_profile(
     )
     applies_to = {"person_id": person_id} if person_id else None
     with session_scope() as session:
+        cache_state = _cache_state_from_session(session)
+        if _cache_is_fresh(cache_state, if_cache_version):
+            return _cached_response(cache_state)
         packet = ContextSynthesisService(session).synthesize_context(
             request,
             include_evidence=include_evidence,
@@ -658,7 +733,9 @@ def summarize_domain_profile(
             include_global=include_global,
             max_tokens=max_tokens,
         )
-        return _context_packet_to_dict(packet)
+        data = _context_packet_to_dict(packet)
+        data["cache"] = _cache_metadata(cache_state, hit=False)
+        return data
 
 
 @mcp.tool()
@@ -692,6 +769,7 @@ def run_pruning_pass(
             "decayed_inferences": result.decayed_inferences,
             "promoted_summaries": result.promoted_summaries,
             "total_actions": result.total_actions,
+            "cache": _cache_metadata(_cache_state_from_session(session), hit=False),
         }
 
 
@@ -699,6 +777,50 @@ def run() -> None:
     """Run the MCP server using the default stdio transport."""
 
     mcp.run()
+
+
+def _cache_state_from_session(session: Any) -> dict[str, Any]:
+    sources = []
+    version_parts = []
+    for table_name, model in CACHE_SOURCE_TABLES:
+        count_value, updated_at = session.execute(
+            select(func.count(model.id), func.max(model.updated_at))
+        ).one()
+        count = int(count_value or 0)
+        updated_at_text = _format_datetime(updated_at)
+        sources.append(
+            {
+                "table": table_name,
+                "count": count,
+                "max_updated_at": updated_at_text,
+            }
+        )
+        version_parts.append(f"{table_name}:{count}:{updated_at_text or ''}")
+    return {
+        "namespace": CACHE_NAMESPACE,
+        "version": "|".join(version_parts),
+        "source_tables": sources,
+    }
+
+
+def _cache_metadata(cache_state: dict[str, Any], *, hit: bool) -> dict[str, Any]:
+    return {
+        "namespace": cache_state["namespace"],
+        "version": cache_state["version"],
+        "hit": hit,
+        "source_tables": cache_state["source_tables"],
+    }
+
+
+def _cache_is_fresh(cache_state: dict[str, Any], if_cache_version: str | None) -> bool:
+    return if_cache_version is not None and if_cache_version == cache_state["version"]
+
+
+def _cached_response(cache_state: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "cached": True,
+        "cache": _cache_metadata(cache_state, hit=True),
+    }
 
 
 def _memory_result_to_dict(result: MemorySearchResult, *, include_evidence: bool = False) -> dict[str, Any]:
@@ -756,6 +878,13 @@ def _memory_write_to_dict(
 def _context_packet_to_dict(packet: ContextPacket) -> dict[str, Any]:
     return {
         "rendered": packet.render(),
+        "context_quality": packet.diagnostics.get("context_quality"),
+        "warnings": packet.diagnostics.get("warnings", []),
+        "suggested_next_action": packet.diagnostics.get("suggested_next_action"),
+        "source_read_policy": packet.diagnostics.get("source_read_policy"),
+        "source_read_budget_tokens": packet.diagnostics.get("source_read_budget_tokens"),
+        "source_read_limits": packet.diagnostics.get("source_read_limits"),
+        "diagnostics": packet.diagnostics,
         "classification": {
             "domain": packet.classification.domain,
             "memory_types": list(packet.classification.memory_types),
@@ -880,6 +1009,10 @@ def _validate_scope_path(scope_path: list[str] | None) -> list[str] | None:
         max_items=MAX_SCOPE_PATH_PARTS,
         max_chars=MAX_SCOPE_PATH_PART_CHARS,
     )
+
+
+def _validate_cache_version(value: str | None) -> str | None:
+    return _validate_text("if_cache_version", value, max_chars=2_000)
 
 
 def _validate_uuid_list(name: str, values: list[str] | None) -> list[str] | None:

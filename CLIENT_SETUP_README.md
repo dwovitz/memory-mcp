@@ -136,6 +136,34 @@ Generate a compact project context packet:
 }
 ```
 
+Inspect `context_quality`, `warnings`, `diagnostics.matched_scopes`,
+`diagnostics.fallback_attempts`, `suggested_next_action`, `source_read_policy`,
+and `source_read_budget_tokens` before relying on a packet. For broad
+architecture, risk, security, authorization, performance, or test-planning
+requests, omit `component` unless the component name is known. If the packet
+says `answer_from_packet`, answer from memory and at most enumerate paths; if
+it says `verify_narrowly`, keep source reads to focused snippets within the
+returned budget; if it says `mark_weak_context`, retry once at project scope or
+record a retrieval miss instead of loading a broad repo outline.
+
+Validate a cached read before recomputing it:
+
+```json
+{
+  "request": "What should I remember while changing retrieval in memory-mcp?",
+  "workspace": "ai",
+  "project": "memory-mcp",
+  "component": "retrieval",
+  "include_global": true,
+  "if_cache_version": "<version from the previous response>"
+}
+```
+
+When the response has `"cached": true`, reuse the client's local cached
+payload. After `add_memory`, `archive_memory`, `supersede_memory`, or
+`run_pruning_pass`, expire cached reads whose stored version differs from the
+returned `cache.version`.
+
 Store a durable project fact:
 
 ```json

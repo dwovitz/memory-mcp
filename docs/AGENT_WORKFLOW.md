@@ -45,6 +45,14 @@ Prefer the narrowest available scope:
 4. `workspace` for facts shared by sibling repositories.
 5. `global` for durable cross-project preferences and rules.
 
+For broad architecture, risk, security, authorization, performance, or test
+planning, omit `component` unless the component name is known to exist in
+memory. If a packet returns `context_quality` other than `strong`, warnings
+about missing project/component matches, or fallback attempts that still look
+thin, retry once at project scope before reading large source slices. Treat a
+weak packet as a measured retrieval miss rather than compensating with broad
+repo-outline loading.
+
 Default options:
 
 ```json
@@ -103,6 +111,12 @@ Use the packet to:
 - Avoid repeating old architectural discussions.
 - Respect current conventions.
 - Detect when a stored fact may be stale and should be verified.
+- Notice `context_quality`, warnings, matched scopes/types, and fallback
+  attempts before deciding how much source to read.
+- Follow `suggested_next_action`, `source_read_policy`, and
+  `source_read_budget_tokens`: answer from the packet when directed, verify
+  only focused snippets within budget when directed, or mark weak context
+  before broad source reads.
 
 Then inspect the relevant files directly before editing.
 

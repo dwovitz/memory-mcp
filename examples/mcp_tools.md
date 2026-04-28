@@ -101,12 +101,21 @@ Branch-scoped memory with a lower-scope override:
 ```json
 {
   "request": "What should I remember while coding memory-mcp?",
+  "workspace": "ai",
+  "project": "memory-mcp",
   "include_evidence": false,
   "include_sensitive": false,
   "max_memories": 8,
   "max_tokens": 1200
 }
 ```
+
+Read `context_quality`, `warnings`, `diagnostics.fallback_attempts`,
+`suggested_next_action`, `source_read_policy`, and
+`source_read_budget_tokens` in the response. A weak project packet means the
+client should retry with a broader project scope or record a retrieval miss
+before reading large source slices; a usable packet should only trigger focused
+snippet verification within the returned budget.
 
 ## list_preferences
 

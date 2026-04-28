@@ -148,16 +148,21 @@ flowchart TD
     Scope{"Scope supplied?"}
     ScopePath["Search scope_path layers"]
     Hierarchy["Search component -> project -> workspace -> global"]
+    Fallback{"Weak component packet?"}
+    ProjectRetry["Retry bounded project scope"]
     Flat["Search direct filters"]
     Rank["Rank by text, confidence, and recency"]
+    Diagnostics["Attach quality diagnostics"]
     Budget["Apply result and token budgets"]
     Packet["Render context packet"]
 
     Request --> Classify --> Scope
     Scope -->|"scope_path"| ScopePath --> Rank
-    Scope -->|"workspace/project/component"| Hierarchy --> Rank
+    Scope -->|"workspace/project/component"| Hierarchy --> Fallback
+    Fallback -->|"yes"| ProjectRetry --> Rank
+    Fallback -->|"no"| Rank
     Scope -->|"none"| Flat --> Rank
-    Rank --> Budget --> Packet
+    Rank --> Diagnostics --> Budget --> Packet
 ```
 
 Ranking combines:
@@ -242,9 +247,24 @@ The packet includes:
 - Facts.
 - Episodic context.
 - Optional evidence.
+- Context quality diagnostics, including warnings, matched scopes/types, and
+  bounded fallback attempts.
+- Suggested next action and source-read policy/budget for downstream agents.
 - Raw-context token estimate.
 - Rendered-packet token estimate.
 - Reduction percentage.
+
+Project packets are considered suspiciously weak when no project/component
+memories match, only inherited workspace/global facts match, or the rendered
+packet is unusually small. Component-scoped broad architecture, risk, security,
+authorization, performance, and test-planning requests can retry with project
+scope, which allows child component memories for the project while preserving
+normal sensitivity, memory-type, result-count, and token-budget limits.
+Broad planning packets use `answer_from_packet`, `verify_narrowly`, or
+`mark_weak_context` so agents can avoid turning a useful memory packet into a
+large source-reading session. Verification budgets are intentionally small and
+are framed around path enumeration or focused snippets, not representative
+whole-file reads.
 
 ## Lifecycle
 

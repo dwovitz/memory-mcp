@@ -16,6 +16,7 @@ see [CLIENT_SETUP_README.md](CLIENT_SETUP_README.md).
 - [Goals](docs/GOALS.md)
 - [Architecture](docs/ARCHITECTURE.md)
 - [Agent workflow](docs/AGENT_WORKFLOW.md)
+- [Benchmark cases](benchmarks/README.md)
 
 The current implementation includes:
 
@@ -92,7 +93,7 @@ POSTGRES_PASSWORD=<required local password>
 POSTGRES_PORT=5432
 POSTGRES_BIND_HOST=127.0.0.1
 PGDATA_HOST_PATH=C:\ai\memory-postgres-data
-MEMORY_MCP_ENABLE_MUTATION_TOOLS=false
+MEMORY_MCP_ENABLE_MUTATION_TOOLS=true
 MEMORY_MCP_ENABLE_SENSITIVE_TOOLS=false
 ```
 
@@ -100,7 +101,9 @@ MEMORY_MCP_ENABLE_SENSITIVE_TOOLS=false
 files. Keep it outside the repository. `POSTGRES_BIND_HOST=127.0.0.1` keeps
 PostgreSQL reachable only from the local machine by default.
 
-MCP safety gates are disabled by default:
+MCP mutation tools are enabled for the local Docker-backed workflow because
+project memory refresh is part of normal repository work. Sensitive/private
+access remains disabled by default:
 
 - `MEMORY_MCP_ENABLE_MUTATION_TOOLS=true` enables `add_memory`,
   `archive_memory`, `supersede_memory`, and `run_pruning_pass`.
@@ -303,8 +306,8 @@ Security defaults:
 - The MCP server assumes a trusted local stdio client.
 - Search, preference, media, and context-packet tools return only `normal`
   sensitivity memories by default.
-- Mutating MCP tools are disabled unless
-  `MEMORY_MCP_ENABLE_MUTATION_TOOLS=true` is set.
+- Mutating MCP tools require `MEMORY_MCP_ENABLE_MUTATION_TOOLS=true`; the
+  local Docker-backed workflow enables this in `.env`/`.env.example`.
 - Sensitive and private memories require both
   `MEMORY_MCP_ENABLE_SENSITIVE_TOOLS=true` and `include_sensitive=true`.
 - Evidence is omitted by default for high-risk tools and must be requested with
@@ -313,6 +316,31 @@ Security defaults:
   `include_content=true` or `include_evidence=true` only when the MCP client
   should receive echoed write details.
 - Tool inputs are bounded to reduce accidental large reads/writes.
+
+### Client-Side Cache Validation
+
+Read tools return a `cache` object with a `namespace`, `version`, and source
+table summary. MCP clients can cache read responses locally using their normal
+argument key plus `cache.version`.
+
+Cache-aware reads can pass `if_cache_version="<previous version>"`. If the
+memory data has not changed, the server returns:
+
+```json
+{
+  "cached": true,
+  "cache": {
+    "namespace": "memory-data",
+    "version": "...",
+    "hit": true
+  }
+}
+```
+
+In that case the client should reuse its local cached payload and avoid the
+more expensive search or context synthesis work. Mutating tools return the new
+`cache.version` after the write so clients can expire cached reads immediately.
+Clients can also call `get_memory_cache_state` for a cheap freshness check.
 
 ### Hierarchical Memory Scope
 
@@ -381,6 +409,7 @@ Available MCP tools:
 - `add_memory`
 - `archive_memory`
 - `supersede_memory`
+- `get_memory_cache_state`
 - `search_memory`
 - `get_context_packet`
 - `list_preferences`
@@ -585,8 +614,24 @@ Packet output includes:
 - Facts
 - Episodic context
 - Optional evidence
+- `context_quality`, warnings, matched scopes/types, and fallback attempts
+- `suggested_next_action`, `source_read_policy`, and
+  `source_read_budget_tokens`
 - Before/after token estimates
 - Optional token budget enforcement through `max_tokens`
+
+For project-scoped packets, weak context is flagged when retrieval finds no
+project/component memories, only higher-level workspace/global facts, or an
+unusually small rendered packet. Broad project risk, architecture, security,
+authorization, performance, and test-planning requests can retry component
+lookups with bounded project-scope retrieval so child component memories remain
+available without removing scope, sensitivity, memory-type, result, or token
+limits.
+
+The source-read guidance is prompt-facing: `answer_from_packet` means answer
+from memory and at most enumerate paths, `verify_narrowly` means read only
+focused snippets within the returned budget, and `mark_weak_context` means
+report a retrieval miss instead of loading broad source.
 
 Examples with token reduction are in `examples/context_packet_synthesis.md`.
 

@@ -13,6 +13,8 @@ large files.
   retrieval flow, lifecycle rules, and Mermaid diagrams.
 - [Agent Workflow](AGENT_WORKFLOW.md) explains how agents should retrieve,
   apply, and refresh context during real coding work.
+- [Benchmarks](../benchmarks/README.md) define task-oriented benchmark cases
+  for feature work, bug fixing, and validation planning.
 - [Client Setup](../CLIENT_SETUP_README.md) explains how to connect Cursor,
   GitHub Copilot, Codex, and Claude Code.
 - [Root README](../README.md) remains the operational setup guide for Docker,

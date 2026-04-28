@@ -1,0 +1,174 @@
+[
+  {
+    "id": "outline_feature_api_collection_invites",
+    "category": "feature_work",
+    "request": "Implement collection-level invite expiration settings in the Outline API.",
+    "workspace": "ai",
+    "project": "outline",
+    "component": "api",
+    "max_memories": 6,
+    "max_tokens": 260,
+    "memories": [
+      {
+        "memory_type": "component_summary",
+        "summary": "Outline API routes validate request schemas, authorize against policies, and keep persistence behind service or model boundaries.",
+        "content": "Outline API routes validate request schemas, authorize against policies, and keep persistence behind service or model boundaries. Feature work should preserve route-level authorization and avoid direct persistence changes in handlers when a service boundary exists.",
+        "applies_to": {
+          "memory_scope": "component",
+          "workspace": "ai",
+          "project": "outline",
+          "component": "api"
+        }
+      },
+      {
+        "memory_type": "project_rule",
+        "summary": "Outline feature changes should include focused tests for permission failures, request validation, and unchanged unrelated behavior.",
+        "content": "Outline feature changes should include focused tests for permission failures, request validation, successful authorized behavior, and unchanged unrelated behavior.",
+        "applies_to": {
+          "memory_scope": "project",
+          "workspace": "ai",
+          "project": "outline"
+        }
+      },
+      {
+        "memory_type": "coding_preference",
+        "summary": "Keep benchmark expectations small, explicit, and tied to observable agent behavior.",
+        "content": "Keep benchmark expectations small, explicit, and tied to observable agent behavior rather than broad repo narration.",
+        "applies_to": {
+          "memory_scope": "global"
+        }
+      }
+    ],
+    "expected": {
+      "domain": "project",
+      "context_quality": "strong",
+      "suggested_next_action": "inspect_budget_then_edit",
+      "source_read_policy": "implementation_required",
+      "min_source_read_budget_tokens": 4000,
+      "min_token_reduction_percent": 20,
+      "facts_include": [
+        "validate request schemas, authorize against policies",
+        "permission failures, request validation"
+      ],
+      "facts_exclude": [
+        "marketing overview"
+      ],
+      "matched_scopes_include": [
+        "component:outline/api",
+        "project:outline"
+      ]
+    }
+  },
+  {
+    "id": "outline_bug_fix_search_authorization",
+    "category": "bug_fix",
+    "request": "Fix an Outline search API bug that returns private document titles without exposing medication evidence from unrelated memory.",
+    "workspace": "ai",
+    "project": "outline",
+    "component": "search",
+    "max_memories": 6,
+    "max_tokens": 260,
+    "memories": [
+      {
+        "memory_type": "component_summary",
+        "summary": "Outline search must filter private documents before returning titles, snippets, or metadata to the requester.",
+        "content": "Outline search must filter private documents before returning titles, snippets, or metadata to the requester. Authorization-sensitive search fixes should cover unauthorized users, collection membership, and shared document access.",
+        "applies_to": {
+          "memory_scope": "component",
+          "workspace": "ai",
+          "project": "outline",
+          "component": "search"
+        }
+      },
+      {
+        "memory_type": "project_fact",
+        "summary": "Outline authorization bugs should be validated with denial tests and positive access tests.",
+        "content": "Outline authorization bugs should be validated with denial tests and positive access tests so fixes do not only hide one failing path.",
+        "applies_to": {
+          "memory_scope": "project",
+          "workspace": "ai",
+          "project": "outline"
+        }
+      },
+      {
+        "memory_type": "medication",
+        "summary": "Example medication memory that must not appear in Outline project bug-fix packets.",
+        "content": "Synthetic example: Alex takes cetirizine in the evening.",
+        "sensitivity": "sensitive",
+        "applies_to": {
+          "memory_scope": "global"
+        }
+      }
+    ],
+    "expected": {
+      "domain": "project",
+      "context_quality": "strong",
+      "suggested_next_action": "inspect_budget_then_edit",
+      "source_read_policy": "implementation_required",
+      "min_source_read_budget_tokens": 4000,
+      "min_token_reduction_percent": 20,
+      "facts_include": [
+        "filter private documents before returning titles",
+        "denial tests and positive access tests"
+      ],
+      "facts_exclude": [
+        "cetirizine",
+        "Example medication memory"
+      ],
+      "matched_memory_types_exclude": [
+        "medication"
+      ]
+    }
+  },
+  {
+    "id": "outline_validation_plan_wrong_component_fallback",
+    "category": "validation_planning",
+    "request": "Create a focused validation plan before changing authenticated Outline API endpoint behavior.",
+    "workspace": "ai",
+    "project": "outline",
+    "component": "tests",
+    "max_memories": 6,
+    "max_tokens": 260,
+    "empty_first_component": true,
+    "memories": [
+      {
+        "memory_type": "component_summary",
+        "summary": "Outline API validation should cover permission failures, request schema errors, and unchanged unrelated route behavior.",
+        "content": "Outline API validation should cover permission failures, request schema errors, and unchanged unrelated route behavior. Prefer targeted endpoint tests over broad snapshot assertions.",
+        "applies_to": {
+          "memory_scope": "component",
+          "workspace": "ai",
+          "project": "outline",
+          "component": "api"
+        }
+      },
+      {
+        "memory_type": "workflow_location",
+        "summary": "For Outline endpoint changes, run focused API tests first, then the relevant broader suite before final closeout.",
+        "content": "For Outline endpoint changes, run focused API tests first, then the relevant broader suite before final closeout so regressions are caught without spending unnecessary iteration time.",
+        "applies_to": {
+          "memory_scope": "project",
+          "workspace": "ai",
+          "project": "outline"
+        }
+      }
+    ],
+    "expected": {
+      "domain": "project",
+      "context_quality": "usable",
+      "suggested_next_action": "verify_narrowly",
+      "source_read_policy": "focused_snippets",
+      "min_source_read_budget_tokens": 2000,
+      "min_token_reduction_percent": 20,
+      "fallback_accepted": true,
+      "facts_include": [
+        "permission failures, request schema errors",
+        "run focused API tests first"
+      ],
+      "matched_scopes_include": [
+        "component:outline/api",
+        "project:outline"
+      ]
+    }
+  }
+]

@@ -33,6 +33,25 @@ from memory_mcp.models import Memory
 from memory_mcp.services import ContextPacket, RequestClassification
 
 
+def _test_cache_state() -> dict:
+    return {
+        "namespace": "memory-data",
+        "version": "test-version",
+        "source_tables": [
+            {
+                "table": "memories",
+                "count": 1,
+                "max_updated_at": "2026-04-26T00:00:00+00:00",
+            }
+        ],
+    }
+
+
+@pytest.fixture(autouse=True)
+def stable_cache_state(monkeypatch) -> None:
+    monkeypatch.setattr(server_module, "_cache_state_from_session", lambda session: _test_cache_state())
+
+
 def test_memory_to_dict_is_json_safe_and_can_include_evidence() -> None:
     memory_id = uuid4()
     entity_id = uuid4()
@@ -72,10 +91,38 @@ def test_context_packet_to_dict_includes_rendered_and_token_estimates() -> None:
         facts=["Uses PostgreSQL."],
         before_token_estimate=100,
         after_token_estimate=25,
+        diagnostics={
+            "context_quality": "strong",
+            "warnings": [],
+            "fallback_attempts": [],
+            "suggested_next_action": "answer_from_packet",
+            "source_read_policy": "path_enum_only",
+            "source_read_budget_tokens": 0,
+            "source_read_limits": {
+                "source_read_budget_tokens": 0,
+                "max_files_before_edit": 0,
+                "max_snippets": 0,
+                "max_lines_per_snippet": 0,
+                "path_enum_allowed": True,
+                "source_content_allowed": False,
+                "broad_read_disallowed": True,
+            },
+        },
     )
 
     data = _context_packet_to_dict(packet)
 
+    assert data["context_quality"] == "strong"
+    assert data["warnings"] == []
+    assert data["suggested_next_action"] == "answer_from_packet"
+    assert data["source_read_policy"] == "path_enum_only"
+    assert data["source_read_budget_tokens"] == 0
+    assert data["source_read_limits"]["max_snippets"] == 0
+    assert data["diagnostics"]["fallback_attempts"] == []
+    assert data["diagnostics"]["suggested_next_action"] == "answer_from_packet"
+    assert data["diagnostics"]["source_read_policy"] == "path_enum_only"
+    assert data["diagnostics"]["source_read_budget_tokens"] == 0
+    assert data["diagnostics"]["source_read_limits"]["source_content_allowed"] is False
     assert data["classification"]["domain"] == "project"
     assert data["classification"]["memory_types"] == ["project_fact"]
     assert data["facts"] == ["Uses PostgreSQL."]
@@ -113,6 +160,17 @@ def test_sensitive_policy_defaults_to_normal_only(monkeypatch) -> None:
 
     monkeypatch.setenv(SENSITIVE_TOOLS_ENV, "true")
     assert _allowed_sensitivities(True) == ALL_SENSITIVITIES
+
+
+def test_runtime_env_loader_reads_configured_env_file(tmp_path, monkeypatch) -> None:
+    env_file = tmp_path / ".env"
+    env_file.write_text("MEMORY_MCP_ENABLE_MUTATION_TOOLS=true\n", encoding="utf-8")
+    monkeypatch.delenv(MUTATION_TOOLS_ENV, raising=False)
+    monkeypatch.setenv("MEMORY_MCP_ENV_FILE", str(env_file))
+
+    server_module._load_runtime_env()
+
+    assert server_module._env_flag(MUTATION_TOOLS_ENV) is True
 
 
 def test_mcp_bounds_reject_oversized_requests() -> None:
@@ -202,6 +260,46 @@ def test_memory_write_to_dict_omits_content_and_evidence_by_default() -> None:
     assert echoed_data["evidence"] == [{"kind": "explicit", "text": "Source detail."}]
 
 
+def test_cache_metadata_marks_hits_and_misses() -> None:
+    miss = server_module._cache_metadata(_test_cache_state(), hit=False)
+    hit = server_module._cached_response(_test_cache_state())
+
+    assert miss["namespace"] == "memory-data"
+    assert miss["version"] == "test-version"
+    assert miss["hit"] is False
+    assert hit == {
+        "cached": True,
+        "cache": {
+            "namespace": "memory-data",
+            "version": "test-version",
+            "hit": True,
+            "source_tables": _test_cache_state()["source_tables"],
+        },
+    }
+
+
+def test_search_memory_returns_cached_response_for_matching_cache_version(monkeypatch) -> None:
+    class FakeScope:
+        def __enter__(self):
+            return object()
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+    class FailingRetrieval:
+        def __init__(self, session) -> None:
+            raise AssertionError("retrieval should not run when client cache is fresh")
+
+    monkeypatch.setattr(server_module, "HybridRetrievalService", FailingRetrieval)
+    monkeypatch.setattr(server_module, "session_scope", lambda: FakeScope())
+
+    result = server_module.search_memory(if_cache_version="test-version")
+
+    assert result["cached"] is True
+    assert result["cache"]["hit"] is True
+    assert result["cache"]["version"] == "test-version"
+
+
 def test_mutation_tools_require_explicit_capability(monkeypatch) -> None:
     monkeypatch.delenv(MUTATION_TOOLS_ENV, raising=False)
 
@@ -242,6 +340,7 @@ def test_archive_memory_tool_archives_existing_memory(monkeypatch) -> None:
 
     assert result["memory"]["id"] == str(memory_id)
     assert result["memory"]["status"] == "archived"
+    assert result["cache"]["version"] == "test-version"
 
 
 def test_supersede_memory_tool_replaces_memory_and_adds_tags(monkeypatch) -> None:
@@ -306,6 +405,7 @@ def test_supersede_memory_tool_replaces_memory_and_adds_tags(monkeypatch) -> Non
     assert "content" not in result["memory"]
     assert "evidence" not in result["memory"]
     assert [tag["tag"] for tag in result["tags"]] == ["project", "flask"]
+    assert result["cache"]["hit"] is False
 
 
 def test_supersede_memory_requires_project_for_project_scope(monkeypatch) -> None:
@@ -380,6 +480,7 @@ def test_add_memory_infers_component_scope(monkeypatch) -> None:
 
     assert result["memory"]["id"] == str(created.id)
     assert "content" not in result["memory"]
+    assert result["cache"]["version"] == "test-version"
 
 
 def test_add_memory_accepts_scope_path_validity_and_branch_override(monkeypatch) -> None:

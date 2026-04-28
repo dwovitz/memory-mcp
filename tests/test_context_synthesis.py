@@ -41,6 +41,7 @@ def memory(
     summary: str,
     content: str,
     evidence=None,
+    applies_to=None,
 ) -> Memory:
     return Memory(
         id=uuid4(),
@@ -49,7 +50,7 @@ def memory(
         content=content,
         evidence=evidence or [],
         metadata_={"seed": True, "verbose": "x" * 200},
-        applies_to={"scope": "development"},
+        applies_to=applies_to or {"scope": "development"},
         confidence="0.9",
     )
 
@@ -86,6 +87,24 @@ def test_project_request_includes_rich_project_context_types() -> None:
     assert "medication" not in call["memory_types"]
     assert "entertainment_preference" not in call["memory_types"]
     assert "inferred_preference" not in call["memory_types"]
+
+
+def test_explicit_project_scope_promotes_architecture_risk_prompt() -> None:
+    retriever = FakeRetriever([])
+    service = ContextSynthesisService(retriever=retriever)
+
+    packet = service.synthesize_context(
+        "Architecture, correctness, authorization, security, and performance risks before changing an authenticated backend API endpoint.",
+        workspace="ai",
+        project="outline",
+        component="backend",
+    )
+
+    call = retriever.calls[0]
+    assert packet.classification.domain == "project"
+    assert call["memory_types"] == PROJECT_CONTEXT_MEMORY_TYPES
+    assert "medication" not in call["memory_types"]
+    assert "entertainment_preference" not in call["memory_types"]
 
 
 def test_synthesis_prefers_summary_unless_detail_requested() -> None:
@@ -212,6 +231,222 @@ def test_component_scoped_synthesis_passes_workspace_and_component() -> None:
     assert call["project"] == "payments-api"
     assert call["component"] == "auth"
     assert call["topic"] == "sessions"
+
+
+def test_weak_component_packet_retries_project_scope_with_diagnostics() -> None:
+    calls = []
+    workspace_memory = memory(
+        "project_fact",
+        summary="The ai workspace contains sibling app repositories.",
+        content="The ai workspace contains sibling app repositories.",
+        applies_to={"memory_scope": "workspace", "workspace": "ai"},
+    )
+    auth_memory = memory(
+        "component_summary",
+        summary="Auth middleware validates JWT, API key, and OAuth token credentials.",
+        content="Auth middleware validates JWT, API key, and OAuth token credentials.",
+        applies_to={
+            "memory_scope": "component",
+            "workspace": "ai",
+            "project": "outline",
+            "component": "auth",
+        },
+    )
+
+    class ComponentFallbackRetriever:
+        def search_hierarchical_memories(self, **kwargs):
+            calls.append(kwargs)
+            if kwargs.get("component") == "backend":
+                return [result(workspace_memory)]
+            if kwargs.get("component") is None:
+                return [result(auth_memory), result(workspace_memory)]
+            return []
+
+    service = ContextSynthesisService(retriever=ComponentFallbackRetriever())
+
+    packet = service.synthesize_context(
+        "Architecture, correctness, authorization, security, and performance risks before adding an authenticated backend API endpoint in Outline.",
+        workspace="ai",
+        project="outline",
+        component="backend",
+        max_memories=10,
+        max_tokens=1200,
+    )
+
+    assert [call.get("component") for call in calls] == ["backend", None]
+    assert packet.facts[0] == "Auth middleware validates JWT, API key, and OAuth token credentials."
+    assert packet.diagnostics["context_quality"] == "usable"
+    assert packet.diagnostics["fallback_attempts"][0]["accepted"] is True
+    assert packet.diagnostics["matched_scopes"] == ["component:outline/auth", "workspace:ai"]
+    assert packet.diagnostics["has_project_scoped_facts"] is True
+    assert packet.diagnostics["has_component_scoped_facts"] is True
+    assert packet.diagnostics["has_direct_component_facts"] is False
+    assert packet.diagnostics["suggested_next_action"] == "verify_narrowly"
+    assert packet.diagnostics["source_read_policy"] == "focused_snippets"
+    assert packet.diagnostics["source_read_budget_tokens"] == 2000
+    assert packet.diagnostics["source_read_limits"]["max_files_before_edit"] == 4
+    assert packet.diagnostics["source_read_limits"]["max_snippets"] == 6
+    assert packet.diagnostics["source_read_limits"]["max_lines_per_snippet"] == 40
+    assert any("Fallback broadened retrieval" in warning for warning in packet.diagnostics["warnings"])
+    assert "## Source Read Guidance" in packet.render()
+    assert "Recommended post-packet source budget: 2000 tokens." in packet.render()
+    rendered = packet.render()
+    assert "If fast search such as rg is unavailable, run path-only search first before reading snippets" in rendered
+    assert rendered.index("path-only search first") < rendered.index("read only bounded snippets")
+    assert "Broad recursive source-output dumps are disallowed as a substitute for search" in rendered
+
+
+def test_project_packet_with_only_workspace_context_marks_weak_context() -> None:
+    workspace_memory = memory(
+        "project_fact",
+        summary="The ai workspace contains sibling app repositories.",
+        content="The ai workspace contains sibling app repositories.",
+        applies_to={"memory_scope": "workspace", "workspace": "ai"},
+    )
+    retriever = FakeRetriever([result(workspace_memory)])
+    service = ContextSynthesisService(retriever=retriever)
+
+    packet = service.synthesize_context(
+        "Architecture risks before changing an authenticated backend API endpoint.",
+        workspace="ai",
+        project="outline",
+    )
+
+    assert packet.diagnostics["context_quality"] == "weak"
+    assert packet.diagnostics["only_workspace_or_global_facts"] is True
+    assert packet.diagnostics["suggested_next_action"] == "mark_weak_context"
+    assert packet.diagnostics["source_read_policy"] == "none"
+    assert packet.diagnostics["source_read_budget_tokens"] == 0
+    assert packet.diagnostics["source_read_limits"]["source_content_allowed"] is False
+
+
+def test_strong_broad_project_packet_recommends_answering_from_packet() -> None:
+    project_memory = memory(
+        "project_fact",
+        summary=(
+            "Outline backend APIs use policy checks in route handlers, validate request "
+            "schemas, and keep persistence changes behind service/model boundaries."
+        ),
+        content=(
+            "Outline backend APIs use policy checks in route handlers, validate request "
+            "schemas, and keep persistence changes behind service/model boundaries."
+        ),
+        applies_to={"memory_scope": "project", "workspace": "ai", "project": "outline"},
+    )
+    retriever = FakeRetriever([result(project_memory)])
+    service = ContextSynthesisService(retriever=retriever)
+
+    packet = service.synthesize_context(
+        "Security and authorization risks for an authenticated backend API endpoint.",
+        workspace="ai",
+        project="outline",
+    )
+
+    assert packet.diagnostics["context_quality"] == "strong"
+    assert packet.diagnostics["suggested_next_action"] == "answer_from_packet"
+    assert packet.diagnostics["source_read_policy"] == "path_enum_only"
+    assert packet.diagnostics["source_read_budget_tokens"] == 0
+    assert packet.diagnostics["source_read_limits"]["path_enum_allowed"] is True
+    assert packet.diagnostics["source_read_limits"]["source_content_allowed"] is False
+    assert packet.diagnostics["source_read_limits"]["path_only_search_first"] is True
+    assert packet.diagnostics["source_read_limits"]["broad_fallback_search_disallowed"] is True
+    assert "git grep -l <term>" in packet.diagnostics["source_read_limits"]["fallback_search_examples"]
+
+
+def test_validation_plan_packet_uses_focused_snippet_budget_when_usable() -> None:
+    api_memory = memory(
+        "component_summary",
+        summary=(
+            "API tests cover authenticated route behavior with targeted endpoint "
+            "fixtures, permission failures, schema validation, and unchanged "
+            "unrelated route behavior."
+        ),
+        content=(
+            "API tests cover authenticated route behavior with targeted endpoint "
+            "fixtures, permission failures, schema validation, and unchanged "
+            "unrelated route behavior."
+        ),
+        applies_to={
+            "memory_scope": "component",
+            "workspace": "ai",
+            "project": "outline",
+            "component": "api",
+        },
+    )
+
+    class ValidationPlanRetriever:
+        def search_hierarchical_memories(self, **kwargs):
+            if kwargs.get("component") == "tests":
+                return []
+            return [result(api_memory)]
+
+    service = ContextSynthesisService(retriever=ValidationPlanRetriever())
+
+    packet = service.synthesize_context(
+        "Focused validation plan for a change that adds or modifies an authenticated backend API endpoint.",
+        workspace="ai",
+        project="outline",
+        component="tests",
+        max_memories=10,
+    )
+
+    assert packet.diagnostics["context_quality"] == "usable"
+    assert packet.diagnostics["broad_project_request"] is True
+    assert packet.diagnostics["suggested_next_action"] == "verify_narrowly"
+    assert packet.diagnostics["source_read_policy"] == "focused_snippets"
+    assert packet.diagnostics["source_read_budget_tokens"] == 2000
+    assert packet.diagnostics["source_read_limits"]["broad_read_disallowed"] is True
+
+
+def test_implementation_packet_includes_concrete_source_read_limits() -> None:
+    api_memory = memory(
+        "component_summary",
+        summary=(
+            "Outline API routes validate request schemas, authorize against policies, "
+            "and keep persistence changes behind service or model boundaries."
+        ),
+        content=(
+            "Outline API routes validate request schemas, authorize against policies, "
+            "and keep persistence changes behind service or model boundaries."
+        ),
+        applies_to={
+            "memory_scope": "component",
+            "workspace": "ai",
+            "project": "outline",
+            "component": "api",
+        },
+    )
+    retriever = FakeRetriever([result(api_memory)])
+    service = ContextSynthesisService(retriever=retriever)
+
+    packet = service.synthesize_context(
+        "Implement collection-level invite expiration settings in the Outline API.",
+        workspace="ai",
+        project="outline",
+        component="api",
+    )
+
+    limits = packet.diagnostics["source_read_limits"]
+    assert packet.diagnostics["suggested_next_action"] == "inspect_budget_then_edit"
+    assert packet.diagnostics["source_read_policy"] == "implementation_required"
+    assert packet.diagnostics["source_read_budget_tokens"] == 4000
+    assert limits["max_files_before_edit"] == 8
+    assert limits["max_snippets"] == 10
+    assert limits["max_lines_per_snippet"] == 60
+    assert limits["source_content_allowed"] is True
+    assert limits["broad_read_disallowed"] is True
+    assert limits["path_only_search_first"] is True
+    assert limits["broad_fallback_search_disallowed"] is True
+    assert limits["fallback_search_examples"] == [
+        "git grep -l <term>",
+        "git ls-files with targeted filtering",
+        "Select-String only over known candidate files",
+    ]
+    rendered = packet.render()
+    assert "Implementation workflow: enumerate likely paths" in rendered
+    assert rendered.index("path-only search first") < rendered.index("read only bounded snippets")
+    assert "Fallback search examples: git grep -l <term>" in rendered
+    assert "Only exceed this budget after naming the missing fact" in rendered
 
 
 def test_scope_path_synthesis_uses_scoped_search() -> None:

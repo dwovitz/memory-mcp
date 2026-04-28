@@ -48,6 +48,7 @@ Track these metrics as the project matures:
 | Metric | Target |
 | --- | --- |
 | Context packet token reduction | Typical packet reduces raw memory context by at least 70%. |
+| Total session context reduction | Memory-first workflows keep post-packet source reads bounded unless implementation or source audit is explicitly required. |
 | Relevance | At least 80% of returned memories should be directly useful for the requested task in manual review. |
 | Setup reliability | Fresh local setup succeeds with documented commands on Windows. |
 | Retrieval precision | Scoped retrieval should prefer component and project facts over broad global facts. |
@@ -144,6 +145,8 @@ parent fact globally obsolete.
 - Hybrid retrieval using structured filters, full text, confidence, recency,
   hierarchy, and scope paths.
 - Context packet synthesis with token estimates and budget enforcement.
+- Packet diagnostics that recommend whether to answer from memory, verify
+  narrowly, or mark weak context before reading broad source.
 - Pruning service for duplicate merge, stale archive, inference decay, and
   summary promotion.
 
