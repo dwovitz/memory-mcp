@@ -53,6 +53,8 @@ executed. Direct Codex execution is not assumed to work in all environments.
 ### In Scope
 
 - Discover benchmark cases from `benchmarks/cases.json`.
+- Validate that the prompt suite contains a meaningful mix of benchmark task
+  types, including complex feature-update cases.
 - Resolve benchmark prompt files from `benchmarks/prompts/`.
 - Run selected variants for selected cases through a subprocess agent command.
 - Pass prompt text through standard input by default.
@@ -148,6 +150,40 @@ Memory variants should also require:
 
 The runner should record validation errors rather than discarding runs.
 
+## Benchmark Case Mix
+
+The suite should deliberately include feature-update work, especially cases that
+are complex enough to show whether memory helps the agent form a correct plan
+before touching source. The prompt suite should not drift into only bug fixes,
+validation plans, or simple single-file edits.
+
+At minimum, the benchmark metadata should contain:
+
+- At least one existing feature-work case.
+- At least two complex feature-update cases.
+- At least one bug-fix case.
+- At least one validation-planning case.
+
+Complex feature-update cases should involve multiple repository boundaries. Good
+Outline examples include API contract changes that touch validation, policy
+checks, persistence, presenters, and focused tests; or product behavior changes
+that span server routes, models or commands, and client-visible response shape.
+
+Complex feature-update cases should be marked in `cases.json` with enough
+metadata for tests and summaries to identify them, for example:
+
+```json
+{
+  "category": "feature_update",
+  "complexity": "complex",
+  "touchpoints": ["api", "authorization", "persistence", "tests"]
+}
+```
+
+The runner should surface category and complexity in `summary.json` and
+`summary.md` so comparisons can answer whether memory helped on substantial
+feature work, not only on safer planning or bug-fix prompts.
+
 ## Docker Update Loop
 
 When `--update-docker` is set, the runner should update the local Docker-backed
@@ -206,6 +242,7 @@ Use test-first implementation for production runner code.
 Initial tests should cover:
 
 - Discovering baseline and memory prompt files for every case.
+- Verifying the benchmark case set includes complex feature-update cases.
 - Selecting cases and variants from CLI arguments.
 - Parsing a valid fenced `BENCHMARK_RESULT` block.
 - Parsing the last result block when multiple blocks appear.
@@ -227,4 +264,3 @@ The tests should not call real Codex, Docker, or Outline commands.
 - Comparison scoring should initially be descriptive rather than judgmental:
   memory budget obeyed, invalid run count, files inspected, files changed,
   tests run, and outcome.
-
