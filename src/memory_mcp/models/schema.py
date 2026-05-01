@@ -542,3 +542,53 @@ class PruningLog(Base):
         server_default=func.now(),
         nullable=False,
     )
+
+
+class AuditEvent(Base):
+    """Provider-neutral security audit event without sensitive payloads."""
+
+    __tablename__ = "audit_events"
+    __table_args__ = (
+        CheckConstraint("decision IN ('allow', 'deny', 'success', 'failure')", name="ck_audit_events_decision"),
+        Index("ix_audit_events_created_at", "created_at"),
+        Index("ix_audit_events_actor_subject", "actor_subject"),
+        Index("ix_audit_events_tool_action", "tool_name", "action"),
+        Index("ix_audit_events_tenant_id", "tenant_id"),
+        Index(
+            "ix_audit_events_resource_scope_gin",
+            "resource_scope",
+            postgresql_using="gin",
+            postgresql_ops={"resource_scope": "jsonb_path_ops"},
+        ),
+    )
+
+    id: Mapped[UUID] = mapped_column(
+        PgUUID(as_uuid=True),
+        primary_key=True,
+        server_default=text("gen_random_uuid()"),
+    )
+    created_at: Mapped[Any] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False,
+    )
+    actor_subject: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    actor_issuer: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    principal_type: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    tenant_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    tool_name: Mapped[str] = mapped_column(String(128), nullable=False)
+    action: Mapped[str] = mapped_column(String(64), nullable=False)
+    resource_scope: Mapped[JsonDict] = mapped_column(
+        JSONB,
+        nullable=False,
+        server_default=text("'{}'::jsonb"),
+    )
+    decision: Mapped[str] = mapped_column(String(32), nullable=False)
+    reason: Mapped[str] = mapped_column(String(255), nullable=False)
+    request_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    metadata_: Mapped[JsonDict] = mapped_column(
+        "metadata",
+        JSONB,
+        nullable=False,
+        server_default=text("'{}'::jsonb"),
+    )

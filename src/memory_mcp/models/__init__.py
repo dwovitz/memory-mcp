@@ -2,6 +2,7 @@
 
 from memory_mcp.models.base import Base
 from memory_mcp.models.schema import (
+    AuditEvent,
     ContextPacket,
     ContextPacketMemory,
     Entity,
@@ -14,6 +15,7 @@ from memory_mcp.models.schema import (
 
 __all__ = [
     "Base",
+    "AuditEvent",
     "ContextPacket",
     "ContextPacketMemory",
     "Entity",

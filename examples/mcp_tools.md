@@ -173,3 +173,13 @@ snippet verification within the returned budget.
   "inference_half_life_days": 90
 }
 ```
+
+## Security Notes
+
+These examples assume trusted local stdio mode. In remote mode, adapters must
+set an authenticated principal before invoking tools. Reads require read access
+to the requested workspace/project/component, mutation tools require mutation
+grants, `include_sensitive=true` requires a sensitive-read grant, and sensitive
+or private write echo through `include_content` or `include_evidence` requires a
+sensitive-echo grant. Denials should be treated as authorization failures, not
+validation errors.

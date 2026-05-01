@@ -15,6 +15,16 @@ from dotenv import load_dotenv
 from mcp.server.fastmcp import FastMCP
 from sqlalchemy import func, select
 
+from memory_mcp.audit import AuditService
+from memory_mcp.auth import (
+    AuthAction,
+    AuthConfig,
+    AuthorizationPolicy,
+    AuthorizationRequest,
+    AuthorizationResult,
+    ResourceScope,
+)
+from memory_mcp.auth.context import get_current_principal
 from memory_mcp.db import session_scope
 from memory_mcp.models import Entity, Memory, MemoryTag, Relationship
 from memory_mcp.pruning import PruningService
@@ -155,6 +165,25 @@ def add_memory(
             **(metadata or {}),
             OVERRIDES_MEMORY_IDS_KEY: overrides_memory_ids,
         }
+    _authorize_tool_call(
+        "add_memory",
+        AuthAction.WRITE,
+        workspace=workspace,
+        project=project,
+        component=component,
+        scope_path=scope_path,
+        requested_sensitivity=sensitivity,
+    )
+    if sensitivity in {"sensitive", "private"} and (include_content or include_evidence):
+        _authorize_tool_call(
+            "add_memory",
+            AuthAction.SENSITIVE_ECHO,
+            workspace=workspace,
+            project=project,
+            component=component,
+            scope_path=scope_path,
+            requested_sensitivity=sensitivity,
+        )
 
     with session_scope() as session:
         service = MemoryService(session)
@@ -175,6 +204,15 @@ def add_memory(
             include_content=include_content,
             include_evidence=include_evidence,
         )
+        _record_success_audit(
+            session,
+            tool_name="add_memory",
+            action=AuthAction.WRITE,
+            workspace=workspace,
+            project=project,
+            component=component,
+            scope_path=scope_path,
+        )
         return {
             "memory": _memory_write_to_dict(
                 memory,
@@ -193,10 +231,12 @@ def archive_memory(
 ) -> dict[str, Any]:
     """Archive an existing memory by UUID."""
 
+    _authorize_tool_call("archive_memory", AuthAction.ARCHIVE)
     _require_mutation_tools_enabled()
     with session_scope() as session:
         service = MemoryService(session)
         memory = service.archive_memory(_parse_required_uuid(memory_id, "memory_id"))
+        _record_success_audit(session, tool_name="archive_memory", action=AuthAction.ARCHIVE)
         return {
             "memory": _memory_to_dict(memory, include_evidence=include_evidence),
             "cache": _cache_metadata(_cache_state_from_session(session), hit=False),
@@ -284,6 +324,25 @@ def supersede_memory(
             **(metadata or {}),
             OVERRIDES_MEMORY_IDS_KEY: overrides_memory_ids,
         }
+    _authorize_tool_call(
+        "supersede_memory",
+        AuthAction.SUPERSEDE,
+        workspace=workspace,
+        project=project,
+        component=component,
+        scope_path=scope_path,
+        requested_sensitivity=sensitivity or "normal",
+    )
+    if sensitivity in {"sensitive", "private"} and (include_content or include_evidence):
+        _authorize_tool_call(
+            "supersede_memory",
+            AuthAction.SENSITIVE_ECHO,
+            workspace=workspace,
+            project=project,
+            component=component,
+            scope_path=scope_path,
+            requested_sensitivity=sensitivity,
+        )
 
     with session_scope() as session:
         service = MemoryService(session)
@@ -305,6 +364,15 @@ def supersede_memory(
             include_content=include_content,
             include_evidence=include_evidence,
         )
+        _record_success_audit(
+            session,
+            tool_name="supersede_memory",
+            action=AuthAction.SUPERSEDE,
+            workspace=workspace,
+            project=project,
+            component=component,
+            scope_path=scope_path,
+        )
         return {
             "superseded_memory_id": memory_id,
             "memory": _memory_write_to_dict(
@@ -321,6 +389,7 @@ def supersede_memory(
 def get_memory_cache_state() -> dict[str, Any]:
     """Return a cheap version token clients can use to validate cached memory reads."""
 
+    _authorize_tool_call("get_memory_cache_state", AuthAction.READ)
     with session_scope() as session:
         return {
             "cache": _cache_metadata(_cache_state_from_session(session), hit=False),
@@ -360,8 +429,26 @@ def search_memory(
     applies_to = _validate_json_payload("applies_to", applies_to, max_chars=MAX_JSON_CHARS)
     limit = _bounded_int("limit", limit, minimum=1, maximum=MAX_SEARCH_LIMIT)
     min_confidence = None if min_confidence is None else _validate_confidence(min_confidence)
-    sensitivities = _allowed_sensitivities(include_sensitive)
     if_cache_version = _validate_cache_version(if_cache_version)
+    _authorize_tool_call(
+        "search_memory",
+        AuthAction.READ,
+        workspace=workspace,
+        project=project,
+        component=component,
+        scope_path=scope_path,
+    )
+    if include_sensitive:
+        _authorize_tool_call(
+            "search_memory",
+            AuthAction.SENSITIVE_READ,
+            workspace=workspace,
+            project=project,
+            component=component,
+            scope_path=scope_path,
+            requested_sensitivity="sensitive",
+        )
+    sensitivities = _allowed_sensitivities(include_sensitive)
 
     with session_scope() as session:
         cache_state = _cache_state_from_session(session)
@@ -459,6 +546,24 @@ def get_context_packet(
         maximum=MAX_CONTEXT_TOKENS,
     )
     if_cache_version = _validate_cache_version(if_cache_version)
+    _authorize_tool_call(
+        "get_context_packet",
+        AuthAction.READ,
+        workspace=workspace,
+        project=project,
+        component=component,
+        scope_path=scope_path,
+    )
+    if include_sensitive:
+        _authorize_tool_call(
+            "get_context_packet",
+            AuthAction.SENSITIVE_READ,
+            workspace=workspace,
+            project=project,
+            component=component,
+            scope_path=scope_path,
+            requested_sensitivity="sensitive",
+        )
     with session_scope() as session:
         cache_state = _cache_state_from_session(session)
         if _cache_is_fresh(cache_state, if_cache_version):
@@ -507,6 +612,24 @@ def list_preferences(
     applies_to = {"person_id": person_id} if person_id else None
     scope = _domain_scope(domain)
     if_cache_version = _validate_cache_version(if_cache_version)
+    _authorize_tool_call(
+        "list_preferences",
+        AuthAction.READ,
+        workspace=workspace,
+        project=project,
+        component=component,
+        scope_path=scope_path,
+    )
+    if include_sensitive:
+        _authorize_tool_call(
+            "list_preferences",
+            AuthAction.SENSITIVE_READ,
+            workspace=workspace,
+            project=project,
+            component=component,
+            scope_path=scope_path,
+            requested_sensitivity="sensitive",
+        )
 
     with session_scope() as session:
         cache_state = _cache_state_from_session(session)
@@ -568,8 +691,15 @@ def list_liked_media(
 
     genre = _validate_text("genre", genre, max_chars=200)
     limit = _bounded_int("limit", limit, minimum=1, maximum=MAX_SEARCH_LIMIT)
-    sensitivities = _allowed_sensitivities(include_sensitive)
     if_cache_version = _validate_cache_version(if_cache_version)
+    _authorize_tool_call("list_liked_media", AuthAction.READ)
+    if include_sensitive:
+        _authorize_tool_call(
+            "list_liked_media",
+            AuthAction.SENSITIVE_READ,
+            requested_sensitivity="sensitive",
+        )
+    sensitivities = _allowed_sensitivities(include_sensitive)
     with session_scope() as session:
         cache_state = _cache_state_from_session(session)
         if _cache_is_fresh(cache_state, if_cache_version):
@@ -611,8 +741,15 @@ def list_disliked_media(
 
     genre = _validate_text("genre", genre, max_chars=200)
     limit = _bounded_int("limit", limit, minimum=1, maximum=MAX_SEARCH_LIMIT)
-    sensitivities = _allowed_sensitivities(include_sensitive)
     if_cache_version = _validate_cache_version(if_cache_version)
+    _authorize_tool_call("list_disliked_media", AuthAction.READ)
+    if include_sensitive:
+        _authorize_tool_call(
+            "list_disliked_media",
+            AuthAction.SENSITIVE_READ,
+            requested_sensitivity="sensitive",
+        )
+    sensitivities = _allowed_sensitivities(include_sensitive)
     with session_scope() as session:
         cache_state = _cache_state_from_session(session)
         if _cache_is_fresh(cache_state, if_cache_version):
@@ -653,6 +790,13 @@ def list_medications_for_person(
     """List medication memories for a person UUID."""
 
     if_cache_version = _validate_cache_version(if_cache_version)
+    _authorize_tool_call("list_medications_for_person", AuthAction.READ)
+    if include_sensitive:
+        _authorize_tool_call(
+            "list_medications_for_person",
+            AuthAction.SENSITIVE_READ,
+            requested_sensitivity="sensitive",
+        )
     with session_scope() as session:
         cache_state = _cache_state_from_session(session)
         if _cache_is_fresh(cache_state, if_cache_version):
@@ -714,6 +858,24 @@ def summarize_domain_profile(
         topic=topic,
     )
     applies_to = {"person_id": person_id} if person_id else None
+    _authorize_tool_call(
+        "summarize_domain_profile",
+        AuthAction.READ,
+        workspace=workspace,
+        project=project,
+        component=component,
+        scope_path=scope_path,
+    )
+    if include_sensitive:
+        _authorize_tool_call(
+            "summarize_domain_profile",
+            AuthAction.SENSITIVE_READ,
+            workspace=workspace,
+            project=project,
+            component=component,
+            scope_path=scope_path,
+            requested_sensitivity="sensitive",
+        )
     with session_scope() as session:
         cache_state = _cache_state_from_session(session)
         if _cache_is_fresh(cache_state, if_cache_version):
@@ -745,6 +907,7 @@ def run_pruning_pass(
 ) -> dict[str, Any]:
     """Run a pruning pass that archives/supersedes/compresses without deleting evidence."""
 
+    _authorize_tool_call("run_pruning_pass", AuthAction.PRUNE)
     _require_mutation_tools_enabled()
     stale_after_days = _bounded_int(
         "stale_after_days",
@@ -763,6 +926,7 @@ def run_pruning_pass(
             stale_after_days=stale_after_days,
             inference_half_life_days=inference_half_life_days,
         )
+        _record_success_audit(session, tool_name="run_pruning_pass", action=AuthAction.PRUNE)
         return {
             "merged_duplicates": result.merged_duplicates,
             "archived_stale": result.archived_stale,
@@ -926,6 +1090,68 @@ def _allowed_sensitivities(include_sensitive: bool) -> tuple[str, ...]:
 
 def _env_flag(name: str) -> bool:
     return os.getenv(name, "").strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _load_auth_config() -> AuthConfig:
+    env_file = Path(os.getenv("MEMORY_MCP_ENV_FILE", PROJECT_ROOT / ".env"))
+    return AuthConfig.from_env(env_file=env_file, require_env_file=False)
+
+
+def _authorize_tool_call(
+    tool_name: str,
+    action: AuthAction,
+    *,
+    workspace: str | None = None,
+    project: str | None = None,
+    component: str | None = None,
+    scope_path: list[str] | None = None,
+    requested_sensitivity: str = "normal",
+) -> None:
+    request = AuthorizationRequest(
+        tool_name=tool_name,
+        action=action,
+        resource=ResourceScope(
+            workspace=workspace,
+            project=project,
+            component=component,
+            scope_path=tuple(scope_path or ()),
+        ),
+        requested_sensitivity=requested_sensitivity,
+    )
+    result = AuthorizationPolicy(_load_auth_config()).evaluate(get_current_principal(), request)
+    if not result.allowed:
+        raise PermissionError(f"Authorization denied for {tool_name}: {result.reason}")
+
+
+def _record_success_audit(
+    session: Any,
+    *,
+    tool_name: str,
+    action: AuthAction,
+    workspace: str | None = None,
+    project: str | None = None,
+    component: str | None = None,
+    scope_path: list[str] | None = None,
+) -> None:
+    if not hasattr(session, "add") or not hasattr(session, "flush"):
+        return
+    principal = get_current_principal()
+    resource = ResourceScope(
+        workspace=workspace,
+        project=project,
+        component=component,
+        scope_path=tuple(scope_path or ()),
+    )
+    AuditService(session).record_authorization(
+        principal_subject=principal.subject if principal else None,
+        principal_issuer=principal.issuer if principal else None,
+        principal_type=principal.principal_type if principal else None,
+        tenant_id=principal.tenant_id if principal else None,
+        tool_name=tool_name,
+        action=action,
+        resource=resource,
+        result=AuthorizationResult(True, "success"),
+    )
 
 
 def _require_mutation_tools_enabled() -> None:

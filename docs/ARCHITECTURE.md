@@ -290,6 +290,16 @@ Lifecycle rules:
 ## Safety Boundaries
 
 - The server is designed for trusted local stdio clients.
+- Hosted or shared transports must use `MEMORY_MCP_AUTH_MODE=remote`, which
+  requires a normalized authenticated principal before MCP tool work runs.
+- Authorization is provider-neutral and evaluates group/subject grants for read,
+  mutation, sensitive, and admin actions before memory operations.
+- Service accounts and human users use the same grant model.
+- Trusted proxy identity headers are ignored unless proxy mode is explicitly
+  configured; operators must strip inbound identity headers before injecting
+  trusted ones.
+- Security audit events are written to `audit_events` without memory content,
+  evidence, provider tokens, secrets, or raw claim payloads.
 - Default retrieval includes only `normal` sensitivity memory.
 - `MEMORY_MCP_ENABLE_MUTATION_TOOLS=true` is required for MCP write, archive,
   supersede, and pruning tools.

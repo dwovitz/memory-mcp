@@ -829,6 +829,8 @@ docker compose exec postgres psql -U memory_mcp -d memory_mcp -c "DROP TABLE per
 
 - `src/memory_mcp/` - Python package source.
 - `src/memory_mcp/db/` - SQLAlchemy engine and session helpers.
+- `src/memory_mcp/auth/` - provider-neutral principals, grants, OIDC, and proxy identity mapping.
+- `src/memory_mcp/audit/` - database-backed audit logging service.
 - `src/memory_mcp/models/` - SQLAlchemy models and shared database types.
 - `src/memory_mcp/repositories/` - CRUD repository layer.
 - `src/memory_mcp/services/` - application services and context synthesis.
@@ -839,3 +841,25 @@ docker compose exec postgres psql -U memory_mcp -d memory_mcp -c "DROP TABLE per
 - `scripts/` - local utility scripts.
 - `tests/` - pytest suite.
 - `examples/` - MCP and context packet examples.
+
+## Authentication And Audit Logging
+
+`memory-mcp` defaults to `MEMORY_MCP_AUTH_MODE=trusted_local`, which preserves
+the current trusted local stdio workflow. Any hosted, HTTP/SSE/WebSocket,
+gateway, reverse-proxy, or shared deployment should set
+`MEMORY_MCP_AUTH_MODE=remote`. Remote mode rejects requests without an
+`AuthenticatedPrincipal` before MCP tool work runs.
+
+Remote deployments configure provider-neutral grants with groups or explicit
+subjects. Mutation, sensitive-memory, sensitive echo, and admin/pruning actions
+have separate grant buckets, and optional project grants narrow access by
+workspace, project, or component. Human users and service accounts use the same
+grant model.
+
+Bearer-token integrations should validate issuer, audience, expiry, signature,
+algorithm, and JWKS key id before mapping provider claims into the normalized
+principal. Trusted proxy headers are disabled by default; when enabled, strip
+untrusted incoming identity headers at the edge and still run application-side
+authorization. Authorization decisions and memory mutation/admin events should
+be recorded in `audit_events` without tokens, provider secrets, raw claims,
+memory content, or evidence.

@@ -140,3 +140,23 @@ Before enabling a remote or shared deployment:
   unsigned tokens, and unsupported algorithms.
 - Confirm provider secrets are loaded from secret management, not committed
   files.
+
+## Implemented Security Boundary
+
+The codebase now has provider-neutral auth primitives under `src/memory_mcp/auth`.
+`AuthenticatedPrincipal` represents human users and service accounts without
+coupling core memory code to Okta, Entra ID, Google Workspace, Auth0, Keycloak,
+or another provider. `AuthorizationPolicy` maps each MCP tool request to a
+read, write, archive, supersede, prune/admin, sensitive-read, or sensitive-echo
+action before tool work runs.
+
+`MEMORY_MCP_AUTH_MODE=trusted_local` is the default for local stdio. Remote mode
+requires OIDC issuer/audience configuration or explicit trusted-proxy
+configuration and denies missing principals. The legacy mutation and sensitive
+environment gates remain in place as compatibility controls; remote deployments
+must also configure authorization grants.
+
+Audit events are stored in `audit_events` with actor, issuer, principal type,
+tenant, tool, action, resource scope, decision, reason, and request id. Audit
+metadata is sanitized so memory content, evidence, tokens, secrets, raw claims,
+and provider payloads are not persisted.

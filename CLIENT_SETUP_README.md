@@ -348,7 +348,10 @@ write policy beyond agent instructions.
 
 ## What Not To Do
 
-- Do not expose this MCP server to untrusted remote clients.
+- Do not expose this MCP server to untrusted remote clients in
+  `trusted_local` mode.
+- Do not use remote HTTP/SSE/WebSocket/gateway/proxy transports without
+  `MEMORY_MCP_AUTH_MODE=remote` and configured authorization grants.
 - Do not store secrets, tokens, API keys, connection strings, or customer data.
 - Do not use broad unscoped searches when a project, component, or `scope_path`
   is known.
@@ -356,6 +359,19 @@ write policy beyond agent instructions.
   location is enough.
 - Do not globally supersede main-branch facts for branch-only changes; use
   `scope_path` plus `overrides_memory_ids`.
+
+## Remote Client Setup
+
+Local stdio clients may continue using trusted no-auth development mode on a
+single trusted machine. Home hosted deployments should run behind HTTPS and set
+remote auth mode. Work deployments may use direct HTTPS bearer-token validation,
+a hosted MCP gateway, or a reverse proxy, but all of them must inject or provide
+a normalized principal before tool dispatch.
+
+Map IdP groups, app roles, scopes, or service-account subjects into project
+grants. Use separate groups for mutation, sensitive reads, sensitive write echo,
+and admin/pruning access. Do not pass provider bearer tokens, client secrets, or
+raw identity payloads into memory records or audit metadata.
 
 ## Source Links For Version Checks
 

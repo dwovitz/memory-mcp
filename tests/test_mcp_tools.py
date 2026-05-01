@@ -10,6 +10,7 @@ from uuid import uuid4
 import pytest
 
 import memory_mcp.mcp_tools.server as server_module
+from memory_mcp.auth.config import AuthConfig
 from memory_mcp.mcp_tools.server import (
     ALL_SENSITIVITIES,
     DEFAULT_SENSITIVITIES,
@@ -298,6 +299,17 @@ def test_search_memory_returns_cached_response_for_matching_cache_version(monkey
     assert result["cached"] is True
     assert result["cache"]["hit"] is True
     assert result["cache"]["version"] == "test-version"
+
+
+def test_remote_mode_rejects_missing_principal_before_session(monkeypatch) -> None:
+    def fail_session_scope():
+        raise AssertionError("database session should not open before remote auth")
+
+    monkeypatch.setattr(server_module, "_load_auth_config", AuthConfig.remote_for_tests)
+    monkeypatch.setattr(server_module, "session_scope", fail_session_scope)
+
+    with pytest.raises(PermissionError, match="missing_principal"):
+        server_module.search_memory(project="memory-mcp")
 
 
 def test_mutation_tools_require_explicit_capability(monkeypatch) -> None:

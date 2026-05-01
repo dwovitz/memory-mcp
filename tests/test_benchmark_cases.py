@@ -103,7 +103,7 @@ def test_outline_benchmark_prompts_exist_for_cases() -> None:
     prompt_text = "\n".join(prompt_text_by_path.values())
 
     case_prompt_files = [
-        path for path in prompt_files if not path.name.startswith(("04-", "07-", "08-", "09-"))
+        path for path in prompt_files if not path.name.startswith(("04-", "07-", "08-", "09-", "10-"))
     ]
     assert len(case_prompt_files) == len(load_cases()) * 2
     assert "D:\\git\\ai\\outline" in prompt_text
