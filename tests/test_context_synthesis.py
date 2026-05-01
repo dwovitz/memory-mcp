@@ -7,6 +7,7 @@ from uuid import uuid4
 from memory_mcp.models import Memory
 from memory_mcp.retrieval import MemorySearchResult, PROJECT_CONTEXT_MEMORY_TYPES
 from memory_mcp.services import ContextSynthesisService
+from memory_mcp.services.context_synthesis import SOURCE_READ_LIMITS_BY_POLICY
 
 
 class FakeRetriever:
@@ -439,14 +440,54 @@ def test_implementation_packet_includes_concrete_source_read_limits() -> None:
     assert limits["broad_fallback_search_disallowed"] is True
     assert limits["fallback_search_examples"] == [
         "git grep -l <term>",
+        "grep -R -l <term> <candidate-dirs>",
         "git ls-files with targeted filtering",
-        "Select-String only over known candidate files",
+        "Select-String -List over known candidate files",
     ]
+    assert "git grep -n <term>" in limits["fallback_search_disallowed_examples"]
+    assert "Select-String without -List for discovery" in limits["fallback_search_disallowed_examples"]
+    assert limits["stop_on_source_output_fallback"] is True
+    assert limits["fallback_source_output_counts_as_budget_failure"] is True
+    assert limits["pre_edit_path_discovery_required"] is True
+    assert limits["pre_edit_candidate_selection_required"] is True
+    assert limits["pre_edit_budget_checkpoint_required"] is True
+    assert limits["extra_pre_edit_reads_require_exception"] is True
+    assert limits["extra_pre_edit_reads_count_as_budget_failure"] is True
+    assert limits["pre_edit_checkpoint_default_action"] == "make_first_edit"
+    assert limits["pre_edit_exception_preserves_budget_compliance"] is False
+    assert limits["pre_edit_sequence"] == [
+        "enumerate likely paths",
+        "choose the top candidate files",
+        "read only bounded snippets from those candidates",
+        "stop at the budget checkpoint before reading more",
+        "make the first edit or explicitly record a budget exception",
+    ]
+    assert "first edit" in limits["pre_edit_stop_rule"]
+    assert "missing fact" in limits["pre_edit_expansion_rule"]
     rendered = packet.render()
     assert "Implementation workflow: enumerate likely paths" in rendered
+    assert "choose the top candidate files" in rendered
+    assert "stop at the budget checkpoint before reading more" in rendered
+    assert "extra pre-edit reads require a recorded budget exception" in rendered
+    assert "count as a budget failure" in rendered
+    assert "default action is to make the first edit" in rendered
+    assert "A recorded exception explains budget failure; it does not preserve compliance" in rendered
+    assert "Do not read tests, model, route, presenter, policy, migration, and client files all up front" in rendered
+    assert "Snippet size limits are hard pre-edit limits" in rendered
     assert rendered.index("path-only search first") < rendered.index("read only bounded snippets")
     assert "Fallback search examples: git grep -l <term>" in rendered
+    assert "Disallowed fallback examples: git grep -n <term>" in rendered
+    assert "If fallback search starts printing source lines, stop immediately" in rendered
     assert "Only exceed this budget after naming the missing fact" in rendered
+
+
+def test_source_read_policy_names_remain_stable() -> None:
+    assert set(SOURCE_READ_LIMITS_BY_POLICY) == {
+        "none",
+        "path_enum_only",
+        "focused_snippets",
+        "implementation_required",
+    }
 
 
 def test_scope_path_synthesis_uses_scoped_search() -> None:

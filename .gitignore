@@ -20,6 +20,9 @@ build/
 dist/
 *.egg-info/
 
+# Benchmark artifacts
+benchmarks/results/runs/
+
 # Environment
 .env
 

@@ -170,5 +170,119 @@
         "project:outline"
       ]
     }
+  },
+  {
+    "id": "outline_feature_update_collection_default_permissions",
+    "category": "feature_update",
+    "complexity": "complex",
+    "touchpoints": [
+      "api",
+      "authorization",
+      "persistence",
+      "presenters",
+      "tests"
+    ],
+    "request": "Implement inherited default permission settings for newly created Outline collections.",
+    "workspace": "ai",
+    "project": "outline",
+    "component": "api",
+    "max_memories": 6,
+    "max_tokens": 320,
+    "memories": [
+      {
+        "memory_type": "component_summary",
+        "summary": "Outline collection API changes should keep request validation, policy checks, model persistence, presenters, and endpoint tests aligned.",
+        "content": "Outline collection API changes should keep request validation, policy checks, model persistence, presenters, and endpoint tests aligned. Default permission behavior must be enforced through existing authorization and collection service boundaries rather than ad hoc route mutations.",
+        "applies_to": {
+          "memory_scope": "component",
+          "workspace": "ai",
+          "project": "outline",
+          "component": "api"
+        }
+      },
+      {
+        "memory_type": "project_rule",
+        "summary": "Complex Outline feature updates need denial tests, successful authorized behavior, persistence coverage, and response-shape assertions.",
+        "content": "Complex Outline feature updates need denial tests, successful authorized behavior, persistence coverage, and response-shape assertions so API, authorization, and presenter behavior stay consistent.",
+        "applies_to": {
+          "memory_scope": "project",
+          "workspace": "ai",
+          "project": "outline"
+        }
+      }
+    ],
+    "expected": {
+      "domain": "project",
+      "context_quality": "strong",
+      "suggested_next_action": "inspect_budget_then_edit",
+      "source_read_policy": "implementation_required",
+      "min_source_read_budget_tokens": 4000,
+      "min_token_reduction_percent": 20,
+      "facts_include": [
+        "request validation, policy checks, model persistence, presenters",
+        "denial tests, successful authorized behavior"
+      ],
+      "matched_scopes_include": [
+        "component:outline/api",
+        "project:outline"
+      ]
+    }
+  },
+  {
+    "id": "outline_feature_update_comment_resolution_audit",
+    "category": "feature_update",
+    "complexity": "complex",
+    "touchpoints": [
+      "api",
+      "authorization",
+      "persistence",
+      "events",
+      "tests"
+    ],
+    "request": "Add comment resolution audit metadata to the Outline API and event flow.",
+    "workspace": "ai",
+    "project": "outline",
+    "component": "api",
+    "max_memories": 6,
+    "max_tokens": 320,
+    "memories": [
+      {
+        "memory_type": "component_summary",
+        "summary": "Outline API event-flow updates should preserve route validation, policy checks, model or command boundaries, event payload shape, and focused tests.",
+        "content": "Outline API event-flow updates should preserve route validation, policy checks, model or command boundaries, event payload shape, and focused tests. Comment state changes should not bypass authorization or emit audit metadata before persistence succeeds.",
+        "applies_to": {
+          "memory_scope": "component",
+          "workspace": "ai",
+          "project": "outline",
+          "component": "api"
+        }
+      },
+      {
+        "memory_type": "project_rule",
+        "summary": "Outline audit-style feature updates should verify unauthorized denial, authorized mutation, emitted event data, and unchanged unrelated response fields.",
+        "content": "Outline audit-style feature updates should verify unauthorized denial, authorized mutation, emitted event data, and unchanged unrelated response fields so user-visible API behavior remains stable.",
+        "applies_to": {
+          "memory_scope": "project",
+          "workspace": "ai",
+          "project": "outline"
+        }
+      }
+    ],
+    "expected": {
+      "domain": "project",
+      "context_quality": "strong",
+      "suggested_next_action": "inspect_budget_then_edit",
+      "source_read_policy": "implementation_required",
+      "min_source_read_budget_tokens": 4000,
+      "min_token_reduction_percent": 20,
+      "facts_include": [
+        "route validation, policy checks, model or command boundaries",
+        "unauthorized denial, authorized mutation, emitted event data"
+      ],
+      "matched_scopes_include": [
+        "component:outline/api",
+        "project:outline"
+      ]
+    }
   }
 ]

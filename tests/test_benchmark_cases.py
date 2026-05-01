@@ -84,12 +84,27 @@ def test_benchmark_cases_are_task_oriented() -> None:
     assert {case["project"] for case in cases} == {"outline"}
 
 
+def test_benchmark_cases_include_complex_feature_updates() -> None:
+    complex_feature_updates = [
+        case
+        for case in load_cases()
+        if case["category"] == "feature_update" and case.get("complexity") == "complex"
+    ]
+
+    assert len(complex_feature_updates) >= 2
+    for case in complex_feature_updates:
+        assert len(case.get("touchpoints", [])) >= 3
+        assert {"api", "authorization", "tests"}.issubset(set(case["touchpoints"]))
+
+
 def test_outline_benchmark_prompts_exist_for_cases() -> None:
     prompt_files = sorted(path for path in BENCHMARK_PROMPTS.glob("*.md") if path.name != "README.md")
     prompt_text_by_path = {path: path.read_text(encoding="utf-8") for path in prompt_files}
     prompt_text = "\n".join(prompt_text_by_path.values())
 
-    case_prompt_files = [path for path in prompt_files if not path.name.startswith("04-")]
+    case_prompt_files = [
+        path for path in prompt_files if not path.name.startswith(("04-", "07-", "08-", "09-"))
+    ]
     assert len(case_prompt_files) == len(load_cases()) * 2
     assert "D:\\git\\ai\\outline" in prompt_text
     assert "D:\\git\\ai\\outline-benchmarks" in prompt_text
@@ -134,6 +149,75 @@ def test_product_improvement_prompt_uses_saved_results() -> None:
     assert "outline_bug_fix_search_authorization-comparison.md" in prompt
     assert "outline_validation_plan_wrong_component_fallback-comparison.md" in prompt
     assert "IMPROVEMENT_PLAN_RESULT" in prompt
+
+
+def test_strict_fallback_implementation_prompt_captures_latest_failures() -> None:
+    prompt = (
+        BENCHMARK_PROMPTS / "04-memory-mcp-implementation-prompt-strict-fallback-and-baseline-isolation.md"
+    ).read_text(encoding="utf-8")
+
+    assert "git grep -n" in prompt
+    assert "stop immediately" in prompt
+    assert "fallback_search_mode: none/path_only/content_dump" in prompt
+    assert "benchmark_invalid: yes/no" in prompt
+    assert "Baseline rules override repo/project AGENTS memory workflow" in prompt
+    assert "fallback_source_output_counts_as_budget_failure" in prompt
+    assert "formatting_churn: none/limited/broad" in prompt
+
+
+def test_codex_benchmark_loop_prompt_executes_runner_and_collates_results() -> None:
+    prompt = (BENCHMARK_PROMPTS / "07-codex-run-outline-benchmark-loop.md").read_text(
+        encoding="utf-8"
+    )
+
+    assert "benchmarks\\run_outline_benchmarks.py" in prompt
+    assert "--apply-improvement-prompt" in prompt
+    assert "--update-docker" in prompt
+    assert "--iterations 2" in prompt
+    assert "summary.json" in prompt
+    assert "collated-analysis.md" in prompt
+    assert "BENCHMARK_LOOP_RESULT" in prompt
+
+
+def test_complex_memory_prompts_require_pre_edit_budget_accounting() -> None:
+    prompt_names = [
+        "05b-memory-outline-feature-update-collection-default-permissions.md",
+        "06b-memory-outline-feature-update-comment-resolution-audit.md",
+    ]
+
+    for prompt_name in prompt_names:
+        prompt = (BENCHMARK_PROMPTS / prompt_name).read_text(encoding="utf-8")
+
+        assert "distinguish path-only discovery from source snippet reads" in prompt
+        assert "record the files/snippets read before the first edit" in prompt
+        assert "pre-edit budget checkpoint" in prompt
+        assert "named a missing fact" in prompt
+        assert "Your objective is to obey the pre-edit limits" in prompt
+        assert "A recorded exception explains budget failure; it does not preserve compliance" in prompt
+        assert "source_read_budget_obeyed: no" in prompt
+        assert "pre_edit_budget_checkpoint_hit: yes/no" in prompt
+        assert "extra_pre_edit_reads_exception_recorded: yes/no/n/a" in prompt
+        assert "pre_edit_source_files_read_count:" in prompt
+        assert "pre_edit_source_snippets_read_count:" in prompt
+        assert "max_snippet_lines_obeyed: yes/no" in prompt
+        assert "fallback_search_mode: none/path_only/content_dump" in prompt
+        assert "formatting_churn: none/limited/broad" in prompt
+
+
+def test_security_audit_prompt_covers_provider_neutral_authentication() -> None:
+    prompt = (BENCHMARK_PROMPTS / "09-memory-mcp-security-audit-authentication.md").read_text(
+        encoding="utf-8"
+    )
+
+    assert "trusted local stdio development without authentication" in prompt
+    assert "provider-neutral principal and authorization interface" in prompt
+    assert "Okta" in prompt
+    assert "Microsoft Entra ID" in prompt
+    assert "Google Workspace" in prompt
+    assert "Auth0" in prompt
+    assert "Keycloak" in prompt
+    assert "reverse-proxy identity" in prompt
+    assert "SECURITY_AUDIT_RESULT" in prompt
 
 
 @pytest.mark.parametrize("case", load_cases(), ids=lambda case: case["id"])

@@ -125,14 +125,47 @@ SOURCE_READ_OVER_BUDGET_EXCEPTION = (
 )
 FALLBACK_SEARCH_EXAMPLES = [
     "git grep -l <term>",
+    "grep -R -l <term> <candidate-dirs>",
     "git ls-files with targeted filtering",
-    "Select-String only over known candidate files",
+    "Select-String -List over known candidate files",
+]
+FALLBACK_SEARCH_DISALLOWED_EXAMPLES = [
+    "git grep -n <term>",
+    "git grep <term> without -l",
+    "recursive grep without -l",
+    "Select-String without -List for discovery",
+    "Get-Content over many files",
 ]
 DEGRADED_SEARCH_GUIDANCE = (
     "If fast search such as rg is unavailable, run path-only search first before reading snippets "
-    "(for example: git grep -l <term>, git ls-files with targeted filtering, or Select-String only "
-    "over known candidate files). Broad recursive source-output dumps are disallowed as a substitute "
-    "for search. After path-only search, read only bounded snippets from selected files."
+    "(for example: git grep -l <term>, grep -R -l <term> <candidate-dirs>, git ls-files with "
+    "targeted filtering, or Select-String -List over known candidate files). Broad recursive "
+    "source-output dumps are disallowed as a substitute for search. If fallback search starts "
+    "printing source lines, stop immediately, discard that output as search context, rerun "
+    "path-only search, and count the incident as a budget failure when tracking benchmark "
+    "source-read compliance. After path-only search, read only bounded snippets from selected files."
+)
+PRE_EDIT_SEQUENCE = [
+    "enumerate likely paths",
+    "choose the top candidate files",
+    "read only bounded snippets from those candidates",
+    "stop at the budget checkpoint before reading more",
+    "make the first edit or explicitly record a budget exception",
+]
+PRE_EDIT_STOP_RULE = (
+    "Stop at the pre-edit budget checkpoint before reading more source. If the likely edit surface "
+    "is still unclear, make the first edit at the most likely boundary or explicitly record a budget "
+    "exception before reading more files or snippets."
+)
+PRE_EDIT_EXPANSION_RULE = (
+    "Reading additional files or snippets before the first edit requires naming the missing fact, "
+    "the file or symbol likely to contain it, and why implementation cannot proceed without it. "
+    "Unless a benchmark explicitly allows the exception, extra pre-edit reads count as a budget failure."
+)
+PRE_EDIT_DEFAULT_ACTION_RULE = (
+    "At the pre-edit budget checkpoint, the default action is to make the first edit at the most likely "
+    "boundary rather than continue reading to complete the full context map. A recorded exception explains "
+    "budget failure; it does not preserve compliance."
 )
 
 
@@ -859,7 +892,22 @@ def _source_read_limits(
     limits["path_only_search_first"] = True
     limits["broad_fallback_search_disallowed"] = True
     limits["fallback_search_examples"] = list(FALLBACK_SEARCH_EXAMPLES)
+    limits["fallback_search_disallowed_examples"] = list(FALLBACK_SEARCH_DISALLOWED_EXAMPLES)
+    limits["stop_on_source_output_fallback"] = True
+    limits["fallback_source_output_counts_as_budget_failure"] = True
     limits["over_budget_exception"] = SOURCE_READ_OVER_BUDGET_EXCEPTION
+    if source_read_policy == "implementation_required":
+        limits["pre_edit_path_discovery_required"] = True
+        limits["pre_edit_candidate_selection_required"] = True
+        limits["pre_edit_budget_checkpoint_required"] = True
+        limits["extra_pre_edit_reads_require_exception"] = True
+        limits["extra_pre_edit_reads_count_as_budget_failure"] = True
+        limits["pre_edit_checkpoint_default_action"] = "make_first_edit"
+        limits["pre_edit_exception_preserves_budget_compliance"] = False
+        limits["pre_edit_sequence"] = list(PRE_EDIT_SEQUENCE)
+        limits["pre_edit_stop_rule"] = PRE_EDIT_STOP_RULE
+        limits["pre_edit_expansion_rule"] = PRE_EDIT_EXPANSION_RULE
+        limits["pre_edit_default_action_rule"] = PRE_EDIT_DEFAULT_ACTION_RULE
     return limits
 
 
@@ -911,8 +959,25 @@ def _source_guidance_lines(diagnostics: dict[str, Any]) -> list[str]:
         )
         if source_read_policy == "implementation_required":
             lines.append(
-                "Implementation workflow: enumerate likely paths, inspect only direct entry points, "
-                "edit once the likely files are identified, and defer broader reading until verification."
+                "Implementation workflow: enumerate likely paths, run path-only search first, choose "
+                "the top candidate files, read only bounded snippets from those candidates, stop at "
+                "the budget checkpoint before reading more, then make the first edit or explicitly "
+                "record a budget exception."
+            )
+            lines.append(
+                "Before the first edit, extra pre-edit reads require a recorded budget exception: "
+                "name the missing fact and likely file or symbol before expanding. Unless the "
+                "benchmark explicitly allows it, those extra reads count as a budget failure."
+            )
+            lines.append(PRE_EDIT_DEFAULT_ACTION_RULE)
+            lines.append(
+                "Do not read tests, model, route, presenter, policy, migration, and client files all "
+                "up front. Pick the most likely entry point and one or two directly adjacent boundaries "
+                "first; expand only after the first edit or after recording the exception."
+            )
+            lines.append(
+                "Snippet size limits are hard pre-edit limits. Do not read oversized chunks and later "
+                "describe them as bounded."
             )
         guidance = limits.get("degraded_search_guidance")
         if guidance:
@@ -920,6 +985,18 @@ def _source_guidance_lines(diagnostics: dict[str, Any]) -> list[str]:
         examples = limits.get("fallback_search_examples") or []
         if examples:
             lines.append("Fallback search examples: " + "; ".join(str(item) for item in examples) + ".")
+        disallowed_examples = limits.get("fallback_search_disallowed_examples") or []
+        if disallowed_examples:
+            lines.append(
+                "Disallowed fallback examples: "
+                + "; ".join(str(item) for item in disallowed_examples)
+                + "."
+            )
+        if limits.get("stop_on_source_output_fallback"):
+            lines.append(
+                "If fallback search starts printing source lines, stop immediately, discard that output, "
+                "rerun path-only search, and count it as a budget failure when benchmarks ask."
+            )
         exception = limits.get("over_budget_exception")
         if exception:
             lines.append(str(exception))

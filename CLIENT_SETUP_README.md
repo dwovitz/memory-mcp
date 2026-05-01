@@ -81,6 +81,34 @@ Portable Python module form:
 }
 ```
 
+Docker stdio form:
+
+```json
+{
+  "mcpServers": {
+    "memory-mcp": {
+      "command": "docker-compose",
+      "args": [
+        "-f",
+        "D:\\git\\ai\\memory-mcp\\docker-compose.yml",
+        "exec",
+        "-T",
+        "memory-mcp",
+        "memory-mcp"
+      ],
+      "cwd": "D:\\git\\ai\\memory-mcp"
+    }
+  }
+}
+```
+
+If a Docker-backed stdio transport starts returning `Transport closed` after
+`docker compose up -d memory-mcp`, rebuilds, or container recreation, restart or
+reload the MCP client session. The container can be healthy while the client's
+old stdio process handle is dead. Verify the server path independently with a
+fresh MCP client or by checking that `docker-compose ... exec -T memory-mcp
+memory-mcp` can be started.
+
 Keep `.env` in the repo root. The MCP process loads database settings from
 there, while `.env` remains ignored by Git.
 
