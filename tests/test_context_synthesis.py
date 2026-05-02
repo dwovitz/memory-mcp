@@ -354,6 +354,45 @@ def test_strong_broad_project_packet_recommends_answering_from_packet() -> None:
     assert "git grep -l <term>" in packet.diagnostics["source_read_limits"]["fallback_search_examples"]
 
 
+def test_source_read_guidance_separates_discovery_from_bounded_snippets() -> None:
+    project_memory = memory(
+        "project_fact",
+        summary="Outline backend changes start from path discovery and bounded snippets.",
+        content="Outline backend changes start from path discovery and bounded snippets.",
+        applies_to={"memory_scope": "project", "workspace": "ai", "project": "outline"},
+    )
+    retriever = FakeRetriever([result(project_memory)])
+    service = ContextSynthesisService(retriever=retriever)
+
+    packet = service.synthesize_context(
+        "Implement a backend API change in Outline.",
+        workspace="ai",
+        project="outline",
+    )
+
+    rendered = packet.render()
+    limits = packet.diagnostics["source_read_limits"]
+    assert limits["path_only_discovery_only"] is True
+    assert limits["select_string_list_only_for_discovery"] is True
+    assert limits["bounded_snippets_after_discovery"] is True
+    assert limits["oversized_snippet_counts_as_budget_failure"] is True
+    assert limits["discard_oversized_snippet_output"] is True
+    assert limits["snippet_count_limit_is_hard"] is True
+    assert limits["bounded_snippets_still_count_toward_budget"] is True
+    assert limits["stop_at_max_snippets_before_edit"] is True
+    assert limits["exceeding_snippet_count_counts_as_budget_failure"] is True
+    assert "Path-only commands are discovery-only" in rendered
+    assert "Select-String -List is allowed only when listing matching files for discovery" in rendered
+    assert "Select-String output with matching source lines is a source snippet read" in rendered
+    assert "After discovery, read only bounded snippets from selected files" in rendered
+    assert "discard oversized snippet output" in rendered
+    assert "count the incident as a source-read budget failure" in rendered
+    assert "Bounded snippets still count toward source_read_limits.max_snippets" in rendered
+    assert "Staying under max_lines_per_snippet is not enough" in rendered
+    assert "Stop at source_read_limits.max_snippets before the first edit" in rendered
+    assert "Exceeding max_snippets before first edit means source_read_budget_obeyed: no" in rendered
+
+
 def test_validation_plan_packet_uses_focused_snippet_budget_when_usable() -> None:
     api_memory = memory(
         "component_summary",
@@ -464,6 +503,36 @@ def test_implementation_packet_includes_concrete_source_read_limits() -> None:
     ]
     assert "first edit" in limits["pre_edit_stop_rule"]
     assert "missing fact" in limits["pre_edit_expansion_rule"]
+    contract = packet.diagnostics["source_read_contract"]
+    assert contract["version"] == "source-read-contract/v1"
+    assert contract["source_read_policy"] == "implementation_required"
+    assert contract["suggested_next_action"] == "inspect_budget_then_edit"
+    assert contract["pre_edit_limits"] == {
+        "max_files": 8,
+        "max_snippets": 10,
+        "max_lines_per_snippet": 60,
+    }
+    assert contract["counting_rules"]["bounded_snippets_count_toward_max_snippets"] is True
+    assert contract["counting_rules"]["path_only_discovery_counts_as_source_read"] is False
+    assert contract["counting_rules"]["select_string_list_is_path_only_discovery"] is True
+    assert contract["counting_rules"]["select_string_matches_count_as_snippets"] is True
+    assert contract["counting_rules"]["oversized_snippet_counts_as_budget_failure"] is True
+    assert contract["counting_rules"]["exceeding_max_snippets_counts_as_budget_failure"] is True
+    assert contract["pre_edit_checkpoint"]["required"] is True
+    assert contract["pre_edit_checkpoint"]["stop_at_max_snippets"] is True
+    assert contract["pre_edit_checkpoint"]["default_action"] == "make_first_edit"
+    assert contract["exception_rule"]["required_before_exceeding_budget"] is True
+    assert contract["exception_rule"]["preserves_budget_compliance"] is False
+    assert contract["exception_rule"]["must_name"] == [
+        "missing_fact",
+        "likely_file_or_symbol",
+        "why_current_bounded_snippets_are_insufficient",
+    ]
+    assert "pre_edit_source_snippets_read_count > pre_edit_limits.max_snippets" in contract[
+        "failure_conditions"
+    ]
+    assert "max_snippet_lines_obeyed == false" in contract["failure_conditions"]
+    assert "source_read_budget_obeyed" in contract["reporting_fields"]
     rendered = packet.render()
     assert "Implementation workflow: enumerate likely paths" in rendered
     assert "choose the top candidate files" in rendered

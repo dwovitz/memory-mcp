@@ -139,11 +139,34 @@ FALLBACK_SEARCH_DISALLOWED_EXAMPLES = [
 DEGRADED_SEARCH_GUIDANCE = (
     "If fast search such as rg is unavailable, run path-only search first before reading snippets "
     "(for example: git grep -l <term>, grep -R -l <term> <candidate-dirs>, git ls-files with "
-    "targeted filtering, or Select-String -List over known candidate files). Broad recursive "
-    "source-output dumps are disallowed as a substitute for search. If fallback search starts "
-    "printing source lines, stop immediately, discard that output as search context, rerun "
-    "path-only search, and count the incident as a budget failure when tracking benchmark "
-    "source-read compliance. After path-only search, read only bounded snippets from selected files."
+    "targeted filtering, or Select-String -List over known candidate files). Path-only commands "
+    "are discovery-only: they identify candidate files, not source context to consume. Select-String "
+    "-List is allowed only when listing matching files for discovery; Select-String output with "
+    "matching source lines is source reading, not discovery. Broad recursive source-output dumps "
+    "are disallowed as a substitute for search. If fallback search starts printing source lines, "
+    "stop immediately, discard that output as search context, rerun path-only search, and count "
+    "the incident as a budget failure when tracking benchmark source-read compliance. After "
+    "path-only search, read only bounded snippets from selected files."
+)
+BOUNDED_SNIPPET_GUIDANCE = (
+    "After discovery, read only bounded snippets from selected files. A bounded snippet should stay "
+    "within the advertised max lines per snippet when that value is nonzero. If a command returns "
+    "more source lines than the snippet limit, stop using that output, discard oversized snippet "
+    "output, rerun a bounded read, and count the incident as a source-read budget failure when "
+    "benchmark tracking asks."
+)
+BOUNDED_SNIPPET_COUNT_GUIDANCE = (
+    "Bounded snippets still count toward source_read_limits.max_snippets. Staying under "
+    "max_lines_per_snippet is not enough if max_snippets is exceeded. Before the first edit, inspect "
+    "only the top few directly implicated files/snippets. Stop at source_read_limits.max_snippets "
+    "before the first edit. If more snippets are needed before the first edit, name the missing fact, "
+    "likely file/symbol, and why the current bounded snippets are insufficient before reading more. "
+    "Exceeding max_snippets before first edit means source_read_budget_obeyed: no unless an explicit "
+    "exception was recorded before exceeding it."
+)
+BOUNDED_SNIPPET_EXCEPTION_GUIDANCE = (
+    "Before exceeding the snippet limit, name the missing fact, the likely file or symbol, and why "
+    "that fact cannot be validated with a bounded snippet."
 )
 PRE_EDIT_SEQUENCE = [
     "enumerate likely paths",
@@ -708,6 +731,12 @@ def _packet_diagnostics(
         source_read_policy,
         source_read_budget_tokens=source_read_budget_tokens,
     )
+    source_read_contract = _source_read_contract(
+        source_read_policy=source_read_policy,
+        suggested_next_action=suggested_next_action,
+        source_read_budget_tokens=source_read_budget_tokens,
+        limits=source_read_limits,
+    )
 
     return {
         "context_quality": context_quality,
@@ -727,6 +756,7 @@ def _packet_diagnostics(
         "source_read_policy": source_read_policy,
         "source_read_budget_tokens": source_read_budget_tokens,
         "source_read_limits": source_read_limits,
+        "source_read_contract": source_read_contract,
         "verification_focus": _verification_focus_examples(request),
     }
 
@@ -895,6 +925,15 @@ def _source_read_limits(
     limits["fallback_search_disallowed_examples"] = list(FALLBACK_SEARCH_DISALLOWED_EXAMPLES)
     limits["stop_on_source_output_fallback"] = True
     limits["fallback_source_output_counts_as_budget_failure"] = True
+    limits["path_only_discovery_only"] = True
+    limits["select_string_list_only_for_discovery"] = True
+    limits["bounded_snippets_after_discovery"] = True
+    limits["oversized_snippet_counts_as_budget_failure"] = True
+    limits["discard_oversized_snippet_output"] = True
+    limits["snippet_count_limit_is_hard"] = True
+    limits["bounded_snippets_still_count_toward_budget"] = True
+    limits["stop_at_max_snippets_before_edit"] = True
+    limits["exceeding_snippet_count_counts_as_budget_failure"] = True
     limits["over_budget_exception"] = SOURCE_READ_OVER_BUDGET_EXCEPTION
     if source_read_policy == "implementation_required":
         limits["pre_edit_path_discovery_required"] = True
@@ -909,6 +948,88 @@ def _source_read_limits(
         limits["pre_edit_expansion_rule"] = PRE_EDIT_EXPANSION_RULE
         limits["pre_edit_default_action_rule"] = PRE_EDIT_DEFAULT_ACTION_RULE
     return limits
+
+
+def _source_read_contract(
+    *,
+    source_read_policy: str,
+    suggested_next_action: str,
+    source_read_budget_tokens: int,
+    limits: dict[str, Any],
+) -> dict[str, Any]:
+    """Return a compact source-read contract for client skills and hooks."""
+
+    return {
+        "version": "source-read-contract/v1",
+        "source_read_policy": source_read_policy,
+        "suggested_next_action": suggested_next_action,
+        "source_read_budget_tokens": source_read_budget_tokens,
+        "pre_edit_limits": {
+            "max_files": limits.get("max_files_before_edit", 0),
+            "max_snippets": limits.get("max_snippets", 0),
+            "max_lines_per_snippet": limits.get("max_lines_per_snippet", 0),
+        },
+        "allowed_discovery": list(limits.get("fallback_search_examples") or []),
+        "disallowed_discovery": list(limits.get("fallback_search_disallowed_examples") or []),
+        "counting_rules": {
+            "bounded_snippets_count_toward_max_snippets": bool(
+                limits.get("bounded_snippets_still_count_toward_budget")
+            ),
+            "path_only_discovery_counts_as_source_read": False,
+            "select_string_list_is_path_only_discovery": bool(
+                limits.get("select_string_list_only_for_discovery")
+            ),
+            "select_string_matches_count_as_snippets": bool(
+                limits.get("select_string_list_only_for_discovery")
+            ),
+            "fallback_source_output_counts_as_budget_failure": bool(
+                limits.get("fallback_source_output_counts_as_budget_failure")
+            ),
+            "oversized_snippet_counts_as_budget_failure": bool(
+                limits.get("oversized_snippet_counts_as_budget_failure")
+            ),
+            "exceeding_max_snippets_counts_as_budget_failure": bool(
+                limits.get("exceeding_snippet_count_counts_as_budget_failure")
+            ),
+        },
+        "pre_edit_checkpoint": {
+            "required": bool(limits.get("pre_edit_budget_checkpoint_required")),
+            "stop_at_max_snippets": bool(limits.get("stop_at_max_snippets_before_edit")),
+            "default_action": limits.get("pre_edit_checkpoint_default_action", "answer_or_verify"),
+        },
+        "exception_rule": {
+            "required_before_exceeding_budget": True,
+            "preserves_budget_compliance": bool(
+                limits.get("pre_edit_exception_preserves_budget_compliance", False)
+            ),
+            "must_name": [
+                "missing_fact",
+                "likely_file_or_symbol",
+                "why_current_bounded_snippets_are_insufficient",
+            ],
+        },
+        "failure_conditions": [
+            "source_content_read_when_source_content_allowed == false",
+            "pre_edit_source_files_read_count > pre_edit_limits.max_files",
+            "pre_edit_source_snippets_read_count > pre_edit_limits.max_snippets",
+            "snippet_line_count > pre_edit_limits.max_lines_per_snippet",
+            "max_snippet_lines_obeyed == false",
+            "fallback_search_mode == content_dump",
+            "exception_recorded_after_budget_exceeded",
+        ],
+        "reporting_fields": [
+            "source_read_budget_obeyed",
+            "source_files_read_count",
+            "source_snippets_read_count",
+            "pre_edit_source_files_read_count",
+            "pre_edit_source_snippets_read_count",
+            "max_snippet_lines_obeyed",
+            "source_budget_exception",
+            "fallback_search_mode",
+            "fallback_search_commands",
+            "broad_search_output_stopped",
+        ],
+    }
 
 
 def _verification_focus_examples(request: str) -> list[str]:
@@ -979,9 +1100,25 @@ def _source_guidance_lines(diagnostics: dict[str, Any]) -> list[str]:
                 "Snippet size limits are hard pre-edit limits. Do not read oversized chunks and later "
                 "describe them as bounded."
             )
+        if limits.get("path_only_discovery_only"):
+            lines.append(
+                "Path-only commands are discovery-only. They identify candidate files, not source "
+                "context to consume."
+            )
+        if limits.get("select_string_list_only_for_discovery"):
+            lines.append(
+                "Select-String -List is allowed only when listing matching files for discovery; "
+                "Select-String output with matching source lines is a source snippet read."
+            )
         guidance = limits.get("degraded_search_guidance")
         if guidance:
             lines.append(str(guidance))
+        if limits.get("bounded_snippets_after_discovery"):
+            lines.append(BOUNDED_SNIPPET_GUIDANCE)
+        if limits.get("bounded_snippets_still_count_toward_budget"):
+            lines.append(BOUNDED_SNIPPET_COUNT_GUIDANCE)
+        if limits.get("oversized_snippet_counts_as_budget_failure"):
+            lines.append(BOUNDED_SNIPPET_EXCEPTION_GUIDANCE)
         examples = limits.get("fallback_search_examples") or []
         if examples:
             lines.append("Fallback search examples: " + "; ".join(str(item) for item in examples) + ".")

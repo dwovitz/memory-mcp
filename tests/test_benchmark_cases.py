@@ -103,7 +103,7 @@ def test_outline_benchmark_prompts_exist_for_cases() -> None:
     prompt_text = "\n".join(prompt_text_by_path.values())
 
     case_prompt_files = [
-        path for path in prompt_files if not path.name.startswith(("04-", "07-", "08-", "09-", "10-"))
+        path for path in prompt_files if not path.name.startswith(("04-", "07-", "08-", "09-", "10-", "11-"))
     ]
     assert len(case_prompt_files) == len(load_cases()) * 2
     assert "D:\\git\\ai\\outline" in prompt_text
@@ -126,14 +126,32 @@ def test_outline_benchmark_prompts_exist_for_cases() -> None:
         assert "source_files_read_count:" in memory_prompt
         assert "source_snippets_read_count:" in memory_prompt
         assert "source_budget_exception:" in memory_prompt
+        if case["category"] in {"feature_work", "bug_fix", "feature_update"}:
+            assert "path-only fallback search does not authorize large source-output reads" in memory_prompt
+            assert "After path-only discovery, read only bounded snippets from selected files" in memory_prompt
+            assert "max_snippet_lines_obeyed: yes/no" in memory_prompt
+            assert "oversized snippets before first edit mean `source_read_budget_obeyed: no`" in memory_prompt
         if case["category"] in {"feature_work", "bug_fix"}:
             for prompt in case_prompts.values():
                 assert "Avoid whole-file formatting or line-ending rewrites unrelated to the fix" in prompt
                 assert "formatter checks first" in prompt
                 assert "formatting_churn: none/limited/broad" in prompt
+                assert "`none` means no unrelated formatting or line-ending churn" in prompt
+                assert "`limited` means formatter changes are confined to intentionally touched hunks/files" in prompt
+                assert "`broad` means whole-file formatting, line-ending rewrites, or very large same-file diffs unrelated to the fix" in prompt
+                assert "fallback_search_mode: none/path_only/content_dump" in prompt
+                assert "fallback_search_commands:" in prompt
+                assert "broad_search_output_stopped: yes/no/n/a" in prompt
         baseline_prompt = "\n".join(text for text in case_prompts.values() if "variant: baseline" in text)
         assert "Do not call `memory-mcp`" in baseline_prompt
         assert "memory_used: no" in baseline_prompt
+        assert "memory_used: yes" not in baseline_prompt
+        memory_prompt = "\n".join(text for text in case_prompts.values() if "variant: memory" in text)
+        if case["category"] in {"feature_work", "bug_fix"}:
+            assert "Baseline rules override repo/project AGENTS memory workflow" in baseline_prompt
+            assert "stop and report the run as invalid instead of continuing with memory" in baseline_prompt
+            assert "benchmark_invalid: yes/no" in baseline_prompt
+            assert "accidental source-output fallback means the source-read budget was not obeyed" in memory_prompt
 
 
 def test_product_improvement_prompt_uses_saved_results() -> None:
@@ -200,8 +218,30 @@ def test_complex_memory_prompts_require_pre_edit_budget_accounting() -> None:
         assert "pre_edit_source_files_read_count:" in prompt
         assert "pre_edit_source_snippets_read_count:" in prompt
         assert "max_snippet_lines_obeyed: yes/no" in prompt
+        assert "path-only fallback search does not authorize large source-output reads" in prompt
+        assert "After path-only discovery, read only bounded snippets from selected files" in prompt
+        assert "oversized snippets before first edit mean `source_read_budget_obeyed: no`" in prompt
         assert "fallback_search_mode: none/path_only/content_dump" in prompt
         assert "formatting_churn: none/limited/broad" in prompt
+
+
+def test_memory_prompts_require_pre_edit_snippet_count_compliance() -> None:
+    prompt_names = [
+        "01b-memory-outline-feature-api-collection-invites.md",
+        "02b-memory-outline-bugfix-search-private-title-leak.md",
+        "05b-memory-outline-feature-update-collection-default-permissions.md",
+        "06b-memory-outline-feature-update-comment-resolution-audit.md",
+    ]
+
+    for prompt_name in prompt_names:
+        prompt = (BENCHMARK_PROMPTS / prompt_name).read_text(encoding="utf-8")
+
+        assert "Bounded snippets still count toward `source_read_limits.max_snippets`" in prompt
+        assert "Staying under `source_read_limits.max_lines_per_snippet` is not enough" in prompt
+        assert "Stop at `source_read_limits.max_snippets` before the first edit" in prompt
+        assert "inspect only the top few directly implicated files/snippets" in prompt
+        assert "name the missing fact, likely file/symbol, and why the current bounded snippets are insufficient" in prompt
+        assert "Exceeding `source_read_limits.max_snippets` before first edit means `source_read_budget_obeyed: no`" in prompt
 
 
 def test_security_audit_prompt_covers_provider_neutral_authentication() -> None:

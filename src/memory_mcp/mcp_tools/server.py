@@ -1048,6 +1048,7 @@ def _context_packet_to_dict(packet: ContextPacket) -> dict[str, Any]:
         "source_read_policy": packet.diagnostics.get("source_read_policy"),
         "source_read_budget_tokens": packet.diagnostics.get("source_read_budget_tokens"),
         "source_read_limits": packet.diagnostics.get("source_read_limits"),
+        "source_read_contract": packet.diagnostics.get("source_read_contract"),
         "diagnostics": packet.diagnostics,
         "classification": {
             "domain": packet.classification.domain,

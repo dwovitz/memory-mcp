@@ -166,13 +166,46 @@ Generate a compact project context packet:
 
 Inspect `context_quality`, `warnings`, `diagnostics.matched_scopes`,
 `diagnostics.fallback_attempts`, `suggested_next_action`, `source_read_policy`,
-and `source_read_budget_tokens` before relying on a packet. For broad
-architecture, risk, security, authorization, performance, or test-planning
-requests, omit `component` unless the component name is known. If the packet
-says `answer_from_packet`, answer from memory and at most enumerate paths; if
-it says `verify_narrowly`, keep source reads to focused snippets within the
-returned budget; if it says `mark_weak_context`, retry once at project scope or
-record a retrieval miss instead of loading a broad repo outline.
+`source_read_budget_tokens`, and `source_read_contract` before relying on a
+packet. For broad architecture, risk, security, authorization, performance, or
+test-planning requests, omit `component` unless the component name is known. If
+the packet says `answer_from_packet`, answer from memory and at most enumerate
+paths; if it says `verify_narrowly`, keep source reads to focused snippets
+within the returned budget; if it says `mark_weak_context`, retry once at
+project scope or record a retrieval miss instead of loading a broad repo
+outline.
+
+### Source Read Contract For Skills And Hooks
+
+`source_read_contract` is a Hook-friendly contract for reusable client skills,
+AGENTS files, benchmark harnesses, and optional hooks. It mirrors the packet's
+source-read guidance in a stable structure:
+
+```json
+{
+  "version": "source-read-contract/v1",
+  "pre_edit_limits": {
+    "max_files": 8,
+    "max_snippets": 10,
+    "max_lines_per_snippet": 60
+  },
+  "counting_rules": {
+    "bounded_snippets_count_toward_max_snippets": true
+  },
+  "failure_conditions": [
+    "pre_edit_source_snippets_read_count > pre_edit_limits.max_snippets",
+    "max_snippet_lines_obeyed == false"
+  ]
+}
+```
+
+Reusable skills and hooks should read `pre_edit_limits.max_snippets`, keep
+pre-edit counters, and stop before the first edit when the count is reached.
+Bounded snippets count toward `max_snippets`; staying under
+`max_lines_per_snippet` is not enough if too many snippets are read. If more
+source is needed before the first edit, an exception must be recorded before exceeding the limit and must name the missing fact, likely file or symbol, and
+why the current bounded snippets are insufficient. Result checkers should mark
+`source_read_budget_obeyed: no` when a `failure_conditions` entry applies.
 
 Validate a cached read before recomputing it:
 
@@ -264,6 +297,17 @@ that scope without marking the parent memory globally superseded:
 ```
 
 ## Recommended Agent Instructions
+
+Ready-to-copy setup templates live under `client-setups/`. Start from the file
+for the target agent, then replace `workspace="ai"` and `project="<repo-name>"`
+with the target repository's values.
+
+| Client | Copy this template | Optional MCP/config template |
+| --- | --- | --- |
+| Codex | `client-setups/codex/AGENTS.md` | `client-setups/codex/config.example.toml` |
+| Claude Code | `client-setups/claude-code/CLAUDE.md` | `client-setups/claude-code/settings.example.json` |
+| Cursor | `client-setups/cursor/.cursor/rules/memory-mcp.mdc` | Configure the same stdio server shape in Cursor settings. |
+| VS Code Copilot | `client-setups/vscode-copilot/.github/copilot-instructions.md` | `client-setups/vscode-copilot/.vscode/mcp.json` |
 
 No custom client skill or hook is required for the server to work. The server is
 most useful when each agent is instructed to retrieve narrow context before

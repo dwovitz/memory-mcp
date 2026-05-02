@@ -120,6 +120,34 @@ Use the packet to:
 
 Then inspect the relevant files directly before editing.
 
+## Source Read Contract
+
+Every context packet can include a Hook-friendly contract named
+`source_read_contract`. Skills, AGENTS files, and client hooks should use this
+structured contract as the source-read source of truth instead of parsing only
+the rendered prose.
+
+Before the first edit:
+
+- Read `source_read_contract.pre_edit_limits.max_files`,
+  `pre_edit_limits.max_snippets`, and `pre_edit_limits.max_lines_per_snippet`.
+- Keep explicit counters for pre-edit source files, source snippets, and lines
+  per snippet.
+- Treat path-only discovery as discovery, not source context.
+- Treat `Select-String -List` as path-only discovery; `Select-String` output
+  with matching source lines is a source snippet read.
+- Remember that bounded snippets count toward `max_snippets`.
+- Stop at `pre_edit_limits.max_snippets`; staying under the per-snippet line
+  limit is not enough when the snippet count limit is exceeded.
+- If more source is needed before the first edit, the exception must be
+  recorded before exceeding the limit, and it must name the missing fact,
+  likely file or symbol, and why the current bounded snippets are insufficient.
+
+Hook or benchmark result checkers should mark `source_read_budget_obeyed: no`
+when any `source_read_contract.failure_conditions` entry applies, including
+pre-edit snippet count overflow, oversized snippets, source-output fallback
+search, or an exception recorded only after the limit was exceeded.
+
 ## Memory Write Rules
 
 Store memory after meaningful work when the new fact is durable and likely to
