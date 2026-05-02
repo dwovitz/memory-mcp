@@ -53,6 +53,22 @@ record whether you named a missing fact before exceeding the budget. Mark
 `source_read_budget_obeyed: no` if you exceed file, snippet, or per-snippet line
 limits before the first edit, even if fallback search was path-only.
 
+path-only fallback search does not authorize large source-output reads from
+selected files. After path-only discovery, read only bounded snippets from selected files
+and keep each snippet within `source_read_limits.max_lines_per_snippet`
+when that value is nonzero. If a command returns oversized source output before
+the first edit, discard it as context, rerun a bounded read, and record
+`max_snippet_lines_obeyed: no`; oversized snippets before first edit mean `source_read_budget_obeyed: no`
+unless you recorded an explicit budget exception
+before exceeding the limit.
+
+Bounded snippets still count toward `source_read_limits.max_snippets`.
+Staying under `source_read_limits.max_lines_per_snippet` is not enough if
+`source_read_limits.max_snippets` is exceeded. Before the first edit, inspect only the top few directly implicated files/snippets.
+Stop at `source_read_limits.max_snippets` before the first edit.
+If more snippets are needed before the first edit, name the missing fact, likely file/symbol, and why the current bounded snippets are insufficient before reading more.
+Exceeding `source_read_limits.max_snippets` before first edit means `source_read_budget_obeyed: no` unless an explicit exception was recorded before exceeding it.
+
 Your objective is to obey the pre-edit limits, not only to report when they were
 exceeded. At the pre-edit budget checkpoint, make the first edit at the most
 likely boundary rather than continuing to read tests, model, route, presenter,

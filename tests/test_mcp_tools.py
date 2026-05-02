@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 from decimal import Decimal
+from pathlib import Path
 from types import SimpleNamespace
 from uuid import uuid4
 
@@ -32,6 +33,8 @@ from memory_mcp.mcp_tools.server import (
 )
 from memory_mcp.models import Memory
 from memory_mcp.services import ContextPacket, RequestClassification
+
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
 
 def _test_cache_state() -> dict:
@@ -108,6 +111,17 @@ def test_context_packet_to_dict_includes_rendered_and_token_estimates() -> None:
                 "source_content_allowed": False,
                 "broad_read_disallowed": True,
             },
+            "source_read_contract": {
+                "version": "source-read-contract/v1",
+                "source_read_policy": "path_enum_only",
+                "suggested_next_action": "answer_from_packet",
+                "pre_edit_limits": {
+                    "max_files": 0,
+                    "max_snippets": 0,
+                    "max_lines_per_snippet": 0,
+                },
+                "failure_conditions": [],
+            },
         },
     )
 
@@ -119,17 +133,81 @@ def test_context_packet_to_dict_includes_rendered_and_token_estimates() -> None:
     assert data["source_read_policy"] == "path_enum_only"
     assert data["source_read_budget_tokens"] == 0
     assert data["source_read_limits"]["max_snippets"] == 0
+    assert data["source_read_contract"]["version"] == "source-read-contract/v1"
+    assert data["source_read_contract"]["pre_edit_limits"]["max_snippets"] == 0
     assert data["diagnostics"]["fallback_attempts"] == []
     assert data["diagnostics"]["suggested_next_action"] == "answer_from_packet"
     assert data["diagnostics"]["source_read_policy"] == "path_enum_only"
     assert data["diagnostics"]["source_read_budget_tokens"] == 0
     assert data["diagnostics"]["source_read_limits"]["source_content_allowed"] is False
+    assert data["diagnostics"]["source_read_contract"]["source_read_policy"] == "path_enum_only"
     assert data["classification"]["domain"] == "project"
     assert data["classification"]["memory_types"] == ["project_fact"]
     assert data["facts"] == ["Uses PostgreSQL."]
     assert data["token_estimates"]["budget"] is None
     assert data["token_estimates"]["reduction_percent"] == 75.0
     assert "# Context Packet" in data["rendered"]
+
+
+def test_client_docs_explain_source_read_contract_for_skills_and_hooks() -> None:
+    client_setup = (PROJECT_ROOT / "CLIENT_SETUP_README.md").read_text(encoding="utf-8")
+    workflow = (PROJECT_ROOT / "docs" / "AGENT_WORKFLOW.md").read_text(encoding="utf-8")
+
+    combined = client_setup + "\n" + workflow
+    assert "source_read_contract" in combined
+    assert "pre_edit_limits.max_snippets" in combined
+    assert "bounded snippets count toward `max_snippets`" in combined
+    assert "Hook-friendly contract" in combined
+    assert "source_read_budget_obeyed" in combined
+    assert "exception must be recorded before exceeding the limit" in combined
+
+
+def test_client_setup_templates_cover_supported_agent_environments() -> None:
+    template_paths = {
+        "codex": PROJECT_ROOT / "client-setups" / "codex" / "AGENTS.md",
+        "codex_config": PROJECT_ROOT / "client-setups" / "codex" / "config.example.toml",
+        "claude": PROJECT_ROOT / "client-setups" / "claude-code" / "CLAUDE.md",
+        "claude_hooks": PROJECT_ROOT / "client-setups" / "claude-code" / "settings.example.json",
+        "cursor": PROJECT_ROOT / "client-setups" / "cursor" / ".cursor" / "rules" / "memory-mcp.mdc",
+        "copilot": PROJECT_ROOT
+        / "client-setups"
+        / "vscode-copilot"
+        / ".github"
+        / "copilot-instructions.md",
+        "copilot_mcp": PROJECT_ROOT / "client-setups" / "vscode-copilot" / ".vscode" / "mcp.json",
+        "common": PROJECT_ROOT / "client-setups" / "common" / "memory-mcp-agent-workflow.md",
+    }
+
+    for path in template_paths.values():
+        assert path.exists(), f"missing template: {path}"
+
+    instruction_text = "\n".join(
+        path.read_text(encoding="utf-8")
+        for key, path in template_paths.items()
+        if key in {"codex", "claude", "cursor", "copilot", "common"}
+    )
+    for expected in [
+        "get_context_packet",
+        "include_global=true",
+        "include_sensitive=false",
+        "source_read_contract",
+        "pre_edit_limits.max_snippets",
+        "bounded snippets count toward `max_snippets`",
+        "source_read_budget_obeyed",
+        "project_memory_refreshed",
+    ]:
+        assert expected in instruction_text
+
+    for key in {"codex_config", "claude_hooks", "copilot_mcp"}:
+        config_text = template_paths[key].read_text(encoding="utf-8")
+        assert "memory-mcp" in config_text
+        assert "D:\\\\git\\\\ai\\\\memory-mcp" in config_text
+
+    client_setup = (PROJECT_ROOT / "CLIENT_SETUP_README.md").read_text(encoding="utf-8")
+    assert "client-setups/codex/AGENTS.md" in client_setup
+    assert "client-setups/claude-code/CLAUDE.md" in client_setup
+    assert "client-setups/cursor/.cursor/rules/memory-mcp.mdc" in client_setup
+    assert "client-setups/vscode-copilot/.github/copilot-instructions.md" in client_setup
 
 
 def test_preference_domain_mapping() -> None:

@@ -1,0 +1,37 @@
+---
+description: Use memory-mcp for durable project context and source-read budget discipline
+alwaysApply: true
+---
+
+# memory-mcp Workflow
+
+Use the `memory-mcp` MCP server before substantial implementation, review,
+debugging, or planning.
+
+Call `get_context_packet` with the narrowest useful scope:
+
+- `workspace="ai"`
+- `project="<repo-name>"`
+- `component="<subsystem>"` when clear
+- `include_global=true`
+- `include_sensitive=false`
+
+Inspect `context_quality`, `suggested_next_action`, `source_read_policy`,
+`source_read_budget_tokens`, `source_read_limits`, and `source_read_contract`
+before reading source.
+
+Treat `source_read_contract` as binding source-read guidance:
+
+- Track pre-edit source files, source snippets, and max lines per snippet.
+- Bounded snippets count toward `max_snippets`.
+- Stop at `source_read_contract.pre_edit_limits.max_snippets` before the first
+  edit.
+- Record an exception before exceeding the contract, naming the missing fact,
+  likely file or symbol, and why current bounded snippets are insufficient.
+- Mark `source_read_budget_obeyed: no` when a contract failure condition
+  applies.
+
+After meaningful project changes, refresh durable non-sensitive project memory
+when mutation tools are enabled. Report `project_memory_refreshed: yes/no` when
+relevant.
+

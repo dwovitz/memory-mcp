@@ -1,0 +1,16 @@
+# Example Codex MCP config.
+# Copy the server entry into the active Codex config and adjust paths as needed.
+
+[mcp_servers.memory-mcp]
+command = "docker"
+args = [
+  "compose",
+  "-f",
+  "D:\\git\\ai\\memory-mcp\\docker-compose.yml",
+  "exec",
+  "-T",
+  "memory-mcp",
+  "memory-mcp",
+]
+cwd = "D:\\git\\ai\\memory-mcp"
+

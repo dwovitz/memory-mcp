@@ -1,0 +1,31 @@
+{
+  "mcpServers": {
+    "memory-mcp": {
+      "command": "docker",
+      "args": [
+        "compose",
+        "-f",
+        "D:\\git\\ai\\memory-mcp\\docker-compose.yml",
+        "exec",
+        "-T",
+        "memory-mcp",
+        "memory-mcp"
+      ],
+      "cwd": "D:\\git\\ai\\memory-mcp"
+    }
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "mcp__memory-mcp__get_context_packet",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "echo memory-mcp context packet requested >> %USERPROFILE%\\memory-mcp-hooks.log"
+          }
+        ]
+      }
+    ]
+  }
+}
+
