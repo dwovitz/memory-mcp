@@ -34,3 +34,5 @@ benchmarks/results/runs/
 # OS
 Thumbs.db
 Desktop.ini
+
+.worktrees/
