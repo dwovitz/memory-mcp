@@ -13,7 +13,9 @@ if str(REPO_ROOT) not in sys.path:
 from benchmarks.outline_benchmark_runner import (
     build_run_plan,
     create_run_directory,
+    format_preflight_plan,
     load_cases,
+    preflight_run_plan,
     run_benchmark_suite,
     select_cases,
     select_variants,
@@ -29,9 +31,12 @@ def main() -> int:
     parser.add_argument("--cases", default="")
     parser.add_argument("--variants", default="baseline,memory")
     parser.add_argument("--iterations", type=int, default=1)
+    parser.add_argument("--mode", choices=("smoke", "targeted", "full"), default="targeted")
     parser.add_argument("--results-dir", type=Path, default=REPO_ROOT / "benchmarks" / "results" / "runs")
     parser.add_argument("--timeout-seconds", type=int, default=3600)
     parser.add_argument("--dry-run", action="store_true")
+    parser.add_argument("--allow-large-token-run", action="store_true")
+    parser.add_argument("--keep-full-artifacts", action="store_true")
     parser.add_argument("--update-docker", action="store_true")
     parser.add_argument("--continue-on-docker-failure", action="store_true")
     parser.add_argument("--apply-improvement-prompt", action="store_true")
@@ -54,14 +59,15 @@ def main() -> int:
         variants,
         REPO_ROOT / "benchmarks" / "prompts",
         iterations=args.iterations,
+        mode=args.mode,
+        explicit_cases=bool(requested_cases),
     )
+    preflight = preflight_run_plan(plan, allow_large_token_run=args.allow_large_token_run)
 
     if args.dry_run:
-        for planned in plan:
-            print(
-                f"iteration={planned.iteration} case={planned.case_id} "
-                f"variant={planned.variant} prompt={planned.prompt_path}"
-            )
+        print(format_preflight_plan(preflight))
+        if not preflight.suite_budget_obeyed and not args.allow_large_token_run:
+            return 1
         return 0
 
     run_dir = create_run_directory(args.results_dir)
@@ -74,6 +80,8 @@ def main() -> int:
         improvement_prompt=args.improvement_prompt,
         update_docker=args.update_docker,
         continue_on_docker_failure=args.continue_on_docker_failure,
+        allow_large_token_run=args.allow_large_token_run,
+        keep_full_artifacts=args.keep_full_artifacts,
         repo_root=REPO_ROOT,
     )
     write_summary_json(results, run_dir / "summary.json")

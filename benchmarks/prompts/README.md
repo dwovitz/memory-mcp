@@ -27,3 +27,12 @@ Both variants start from `origin/main` in their own worktree and finish with a
 After running the benchmark pairs, use
 `04-memory-mcp-improvement-plan-from-results.md` to ask a fresh agent to plan
 product changes for `memory-mcp` based on the saved comparison artifacts.
+
+Additional product improvement prompts:
+
+- `12-memory-mcp-implementation-prompt-token-budgeted-benchmark-runs.md`:
+  add benchmark run modes, token preflight, budget enforcement, and compact
+  artifacts so routine benchmark runs do not consume unbounded tokens.
+- `13-codex-token-budgeted-outline-benchmark-loop.md`: run the updated
+  token-budgeted benchmark loop, collate compact artifacts, review evidence,
+  and create a focused `fix-prompt.md` when results justify another iteration.

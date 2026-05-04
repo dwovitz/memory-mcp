@@ -103,7 +103,9 @@ def test_outline_benchmark_prompts_exist_for_cases() -> None:
     prompt_text = "\n".join(prompt_text_by_path.values())
 
     case_prompt_files = [
-        path for path in prompt_files if not path.name.startswith(("04-", "07-", "08-", "09-", "10-", "11-"))
+        path
+        for path in prompt_files
+        if not path.name.startswith(("04-", "07-", "08-", "09-", "10-", "11-", "12-", "13-"))
     ]
     assert len(case_prompt_files) == len(load_cases()) * 2
     assert "D:\\git\\ai\\outline" in prompt_text
@@ -194,6 +196,23 @@ def test_codex_benchmark_loop_prompt_executes_runner_and_collates_results() -> N
     assert "--iterations 2" in prompt
     assert "summary.json" in prompt
     assert "collated-analysis.md" in prompt
+    assert "BENCHMARK_LOOP_RESULT" in prompt
+
+
+def test_token_budgeted_benchmark_loop_prompt_runs_review_and_fix_prompt_loop() -> None:
+    prompt = (BENCHMARK_PROMPTS / "13-codex-token-budgeted-outline-benchmark-loop.md").read_text(
+        encoding="utf-8"
+    )
+
+    assert "benchmarks\\run_outline_benchmarks.py" in prompt
+    assert "--mode targeted" in prompt
+    assert "--dry-run" in prompt
+    assert "--allow-large-token-run" in prompt
+    assert "--keep-full-artifacts" in prompt
+    assert "stdout-tail.txt" in prompt
+    assert "summary.json" in prompt
+    assert "collated-analysis.md" in prompt
+    assert "fix-prompt.md" in prompt
     assert "BENCHMARK_LOOP_RESULT" in prompt
 
 

@@ -8,12 +8,15 @@ from pathlib import Path
 
 from benchmarks.outline_benchmark_runner import (
     AgentExecution,
+    DEFAULT_BUDGET_PROFILES,
     ParsedBenchmarkResult,
     build_run_plan,
     create_run_directory,
     discover_prompt,
+    format_preflight_plan,
     load_cases,
     parse_benchmark_result,
+    preflight_run_plan,
     run_agent,
     run_benchmark_suite,
     run_docker_update,
@@ -130,6 +133,103 @@ def test_build_run_plan_includes_case_metadata(tmp_path: Path) -> None:
     assert plan[0].iteration == 1
     assert plan[0].category == "feature_update"
     assert plan[0].complexity == "complex"
+    assert plan[0].mode == "targeted"
+    assert plan[0].budget.max_total_tokens == DEFAULT_BUDGET_PROFILES["targeted"].max_total_tokens
+    assert plan[0].estimated_prompt_tokens > 0
+
+
+def test_smoke_mode_reduces_plan_when_cases_are_not_explicit(tmp_path: Path) -> None:
+    cases = []
+    for index in range(1, 4):
+        case_id = f"outline_case_{index}"
+        prompt = tmp_path / f"0{index}a-baseline-outline-case-{index}.md"
+        prompt.write_text(f"Prompt {index}", encoding="utf-8")
+        cases.append({"id": case_id, "category": "feature_update"})
+
+    plan = build_run_plan(
+        cases,
+        ["baseline"],
+        tmp_path,
+        iterations=1,
+        mode="smoke",
+        explicit_cases=False,
+    )
+
+    assert [planned.case_id for planned in plan] == ["outline_case_1"]
+
+
+def test_preflight_reports_estimated_tokens_without_launching_agent(tmp_path: Path) -> None:
+    prompt = tmp_path / "01a-baseline-outline-feature.md"
+    prompt.write_text("Prompt body", encoding="utf-8")
+    planned = build_run_plan(
+        [{"id": "outline_feature", "category": "feature_update"}],
+        ["baseline"],
+        tmp_path,
+        iterations=1,
+        mode="targeted",
+    )
+
+    preflight = preflight_run_plan(planned)
+    output = format_preflight_plan(preflight)
+
+    assert preflight.projected_suite_tokens > 0
+    assert preflight.items[0].status == "allowed"
+    assert "case=outline_feature" in output
+    assert "estimated_prompt_tokens=" in output
+    assert "mode=targeted" in output
+
+
+def test_suite_budget_overflow_fails_before_launch_unless_allowed(tmp_path: Path) -> None:
+    prompt = tmp_path / "01a-baseline-outline-feature.md"
+    prompt.write_text("Prompt body", encoding="utf-8")
+    tiny_budget = DEFAULT_BUDGET_PROFILES["targeted"].replace(max_total_run_tokens=1)
+    planned = build_run_plan(
+        [{"id": "outline_feature", "category": "feature_update"}],
+        ["baseline"],
+        tmp_path,
+        iterations=1,
+        budget_profiles={"targeted": tiny_budget},
+    )
+    launched = False
+
+    def fake_agent(agent_command: str, prompt_text: str, *, timeout_seconds: int) -> AgentExecution:
+        nonlocal launched
+        launched = True
+        raise AssertionError("agent should not launch")
+
+    try:
+        run_benchmark_suite(
+            planned,
+            agent_command="fake-agent",
+            run_dir=tmp_path / "run",
+            timeout_seconds=10,
+            agent_runner=fake_agent,
+        )
+    except ValueError as error:
+        assert "projected suite token use" in str(error)
+    else:
+        raise AssertionError("expected suite budget overflow to raise")
+    assert launched is False
+
+    results = run_benchmark_suite(
+        planned,
+        agent_command="fake-agent",
+        run_dir=tmp_path / "run-allowed",
+        timeout_seconds=10,
+        allow_large_token_run=True,
+        agent_runner=lambda *args, **kwargs: AgentExecution(
+            command=["fake-agent"],
+            stdout="BENCHMARK_RESULT",
+            stderr="",
+            exit_code=0,
+            timed_out=False,
+            started_at="2026-04-30T12:00:00",
+            ended_at="2026-04-30T12:00:01",
+            duration_seconds=1.0,
+        ),
+    )
+
+    assert len(results) == 1
 
 
 def test_create_run_directory_avoids_existing_timestamp(tmp_path: Path) -> None:
@@ -142,7 +242,7 @@ def test_create_run_directory_avoids_existing_timestamp(tmp_path: Path) -> None:
     assert run_dir.is_dir()
 
 
-def test_run_planned_benchmark_saves_agent_artifacts(tmp_path: Path) -> None:
+def test_run_planned_benchmark_saves_compact_agent_artifacts_by_default(tmp_path: Path) -> None:
     prompt = tmp_path / "01a-baseline-outline-feature.md"
     prompt.write_text("Prompt body", encoding="utf-8")
     agent = tmp_path / "fake_agent.py"
@@ -182,13 +282,40 @@ print("```")
 
     artifact_dir = tmp_path / "run" / "outline_feature" / "1" / "baseline"
     assert result.validation.valid is True
-    assert (artifact_dir / "prompt.md").read_text(encoding="utf-8") == "Prompt body"
-    assert "saw prompt: Prompt body" in (artifact_dir / "stdout.txt").read_text(encoding="utf-8")
-    assert (artifact_dir / "stderr.txt").read_text(encoding="utf-8") == ""
+    assert not (artifact_dir / "prompt.md").exists()
+    assert not (artifact_dir / "stdout.txt").exists()
+    assert not (artifact_dir / "stderr.txt").exists()
+    assert "saw prompt: Prompt body" in (artifact_dir / "stdout-tail.txt").read_text(encoding="utf-8")
+    assert (artifact_dir / "stderr-tail.txt").read_text(encoding="utf-8") == ""
     assert (artifact_dir / "raw-result-block.txt").read_text(encoding="utf-8").startswith("BENCHMARK_RESULT")
     saved = json.loads((artifact_dir / "result.json").read_text(encoding="utf-8"))
     assert saved["parsed"]["case_id"] == "outline_feature"
     assert saved["valid"] is True
+    assert saved["estimated_prompt_tokens"] == result.token_metrics.estimated_prompt_tokens
+
+
+def test_keep_full_artifacts_preserves_prompt_and_transcripts(tmp_path: Path) -> None:
+    prompt = tmp_path / "01a-baseline-outline-feature.md"
+    prompt.write_text("Prompt body", encoding="utf-8")
+    planned = build_run_plan(
+        [{"id": "outline_feature", "category": "feature_update", "complexity": "complex"}],
+        ["baseline"],
+        tmp_path,
+        iterations=1,
+    )[0]
+
+    result = run_planned_benchmark(
+        planned,
+        agent_command=f"{sys.executable} -c \"print('BENCHMARK_RESULT')\"",
+        run_dir=tmp_path / "run",
+        timeout_seconds=10,
+        keep_full_artifacts=True,
+    )
+
+    artifact_dir = tmp_path / "run" / "outline_feature" / "1" / "baseline"
+    assert (artifact_dir / "prompt.md").read_text(encoding="utf-8") == "Prompt body"
+    assert (artifact_dir / "stdout.txt").read_text(encoding="utf-8") == result.execution.stdout
+    assert (artifact_dir / "stderr.txt").read_text(encoding="utf-8") == result.execution.stderr
 
 
 def test_run_agent_replaces_undecodable_output_bytes() -> None:
@@ -226,9 +353,64 @@ def test_summary_writers_include_category_and_validity(tmp_path: Path) -> None:
     summary = json.loads((tmp_path / "summary.json").read_text(encoding="utf-8"))
     assert summary["runs"][0]["category"] == "feature_update"
     assert summary["runs"][0]["complexity"] == "complex"
-    assert "| outline_feature | 1 | baseline | feature_update | complex | no |" in (
+    assert summary["runs"][0]["estimated_prompt_tokens"] == result.token_metrics.estimated_prompt_tokens
+    assert summary["runs"][0]["actual_total_tokens"] == "unknown"
+    assert summary["runs"][0]["token_budget_obeyed"] == "unknown"
+    assert "| outline_feature | 1 | baseline | no |" in (
         tmp_path / "summary.md"
     ).read_text(encoding="utf-8")
+
+
+def test_actual_token_usage_is_parsed_and_budget_failure_is_reported(tmp_path: Path) -> None:
+    prompt = tmp_path / "01a-baseline-outline-feature.md"
+    prompt.write_text("Prompt body", encoding="utf-8")
+    tiny_budget = DEFAULT_BUDGET_PROFILES["targeted"].replace(
+        max_completion_tokens=1,
+        max_total_tokens=15,
+    )
+    planned = build_run_plan(
+        [{"id": "outline_feature", "category": "feature_update"}],
+        ["baseline"],
+        tmp_path,
+        iterations=1,
+        budget_profiles={"targeted": tiny_budget},
+    )[0]
+
+    result = run_planned_benchmark(
+        planned,
+        agent_command="fake-agent",
+        run_dir=tmp_path / "run",
+        timeout_seconds=10,
+        allow_large_token_run=True,
+        agent_runner=lambda *args, **kwargs: AgentExecution(
+            command=["fake-agent"],
+            stdout=(
+                "usage: input_tokens=7 output_tokens=9 total_tokens=16\n"
+                "BENCHMARK_RESULT\n"
+                "case_id: outline_feature\n"
+                "project: outline\n"
+                "variant: baseline\n"
+                "worktree: D:\\git\\ai\\outline-benchmarks\\case\\baseline\n"
+                "branch: benchmark/case-baseline\n"
+                "memory_used: no\n"
+                "files_changed: server/routes/api.ts\n"
+                "tests_run: yarn test server/routes/api.test.ts\n"
+                "outcome: completed\n"
+            ),
+            stderr="",
+            exit_code=0,
+            timed_out=False,
+            started_at="2026-04-30T12:00:00",
+            ended_at="2026-04-30T12:00:01",
+            duration_seconds=1.0,
+        ),
+    )
+
+    assert result.token_metrics.actual_input_tokens == 7
+    assert result.token_metrics.actual_output_tokens == 9
+    assert result.token_metrics.actual_total_tokens == 16
+    assert result.token_metrics.token_budget_obeyed == "no"
+    assert "actual total tokens exceeded" in result.token_metrics.token_budget_exception
 
 
 def test_run_docker_update_uses_expected_command_order(tmp_path: Path) -> None:
