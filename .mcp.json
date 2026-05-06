@@ -1,11 +1,25 @@
 {
   "mcpServers": {
+    "memory-mcp": {
+      "command": "docker",
+      "args": [
+        "compose",
+        "-f",
+        "D:\\git\\ai\\memory-mcp\\docker-compose.yml",
+        "exec",
+        "-T",
+        "memory-mcp",
+        "memory-mcp"
+      ],
+      "cwd": "D:\\git\\ai\\memory-mcp"
+    },
     "code-review-graph": {
       "command": "code-review-graph",
       "args": [
         "serve"
       ],
-      "type": "stdio"
+      "type": "stdio",
+      "timeout": 300000
     }
   }
 }

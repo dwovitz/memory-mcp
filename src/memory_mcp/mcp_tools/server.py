@@ -27,6 +27,7 @@ from memory_mcp.auth import (
 )
 from memory_mcp.auth.context import get_current_principal
 from memory_mcp.db import session_scope
+from memory_mcp.embeddings.config import get_embedding_service
 from memory_mcp.models import Entity, Memory, MemoryTag, Relationship
 from memory_mcp.pruning import PruningService
 from memory_mcp.retrieval import EntitySearchResult, HybridRetrievalService, MemorySearchResult
@@ -120,7 +121,12 @@ def add_memory(
     include_content: bool = False,
     include_evidence: bool = False,
 ) -> dict[str, Any]:
-    """Add a memory and optional tags."""
+    """Add a memory and optional tags.
+
+    Note: the ``embedding`` column is left NULL on write (lazy embedding design).
+    Run ``scripts/backfill_embeddings.py`` to populate embeddings and enable
+    vector re-ranking for memories written through this tool.
+    """
 
     _require_mutation_tools_enabled()
     content = _validate_text("content", content, max_chars=MAX_TEXT_CHARS, required=True)
@@ -473,7 +479,7 @@ def search_memory(
         cache_state = _cache_state_from_session(session)
         if _cache_is_fresh(cache_state, if_cache_version):
             return _cached_response(cache_state)
-        retrieval = HybridRetrievalService(session)
+        retrieval = HybridRetrievalService(session, embedding_service=get_embedding_service(session))
         if scope_path:
             results = retrieval.search_scope_path_memories(
                 scope_path=scope_path,
@@ -490,6 +496,7 @@ def search_memory(
         elif workspace or project or component:
             results = retrieval.search_hierarchical_memories(
                 workspace=workspace,
+                repo=repo,
                 project=project,
                 component=component,
                 topic=topic,
@@ -595,6 +602,7 @@ def get_context_packet(
             max_memories=max_memories,
             sensitivities=_allowed_sensitivities(include_sensitive),
             workspace=workspace,
+            repo=repo,
             project=project,
             component=component,
             topic=topic,
@@ -658,7 +666,7 @@ def list_preferences(
         cache_state = _cache_state_from_session(session)
         if _cache_is_fresh(cache_state, if_cache_version):
             return _cached_response(cache_state)
-        retrieval = HybridRetrievalService(session)
+        retrieval = HybridRetrievalService(session, embedding_service=get_embedding_service(session))
         if scope_path:
             results = retrieval.search_scope_path_memories(
                 scope_path=scope_path,
@@ -672,6 +680,7 @@ def list_preferences(
         elif workspace or project or component:
             results = retrieval.search_hierarchical_memories(
                 workspace=workspace,
+                repo=repo,
                 project=project,
                 component=component,
                 memory_types=memory_types,
@@ -727,7 +736,7 @@ def list_liked_media(
         cache_state = _cache_state_from_session(session)
         if _cache_is_fresh(cache_state, if_cache_version):
             return _cached_response(cache_state)
-        retrieval = HybridRetrievalService(session)
+        retrieval = HybridRetrievalService(session, embedding_service=get_embedding_service(session))
         if genre:
             memories = retrieval.list_liked_items_by_genre(
                 genre,
@@ -777,7 +786,7 @@ def list_disliked_media(
         cache_state = _cache_state_from_session(session)
         if _cache_is_fresh(cache_state, if_cache_version):
             return _cached_response(cache_state)
-        retrieval = HybridRetrievalService(session)
+        retrieval = HybridRetrievalService(session, embedding_service=get_embedding_service(session))
         if genre:
             memories = retrieval.list_disliked_items_by_genre(
                 genre,
@@ -824,7 +833,7 @@ def list_medications_for_person(
         cache_state = _cache_state_from_session(session)
         if _cache_is_fresh(cache_state, if_cache_version):
             return _cached_response(cache_state)
-        retrieval = HybridRetrievalService(session)
+        retrieval = HybridRetrievalService(session, embedding_service=get_embedding_service(session))
         memories = retrieval.get_medications_for_person(
             _parse_required_uuid(person_id, "person_id"),
             include_archived=include_archived,
@@ -912,6 +921,7 @@ def summarize_domain_profile(
             applies_to=applies_to,
             sensitivities=_allowed_sensitivities(include_sensitive),
             workspace=workspace,
+            repo=repo,
             project=project,
             component=component,
             topic=topic,
@@ -1000,7 +1010,7 @@ def search_entities(
         cache_state = _cache_state_from_session(session)
         if _cache_is_fresh(cache_state, if_cache_version):
             return _cached_response(cache_state)
-        retrieval = HybridRetrievalService(session)
+        retrieval = HybridRetrievalService(session, embedding_service=get_embedding_service(session))
         results = retrieval.search_entities(
             text_query=query,
             entity_types=_tuple_or_none(entity_types),

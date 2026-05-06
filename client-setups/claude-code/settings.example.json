@@ -12,6 +12,14 @@
         "memory-mcp"
       ],
       "cwd": "D:\\git\\ai\\memory-mcp"
+    },
+    "code-review-graph": {
+      "command": "code-review-graph",
+      "args": [
+        "serve"
+      ],
+      "type": "stdio",
+      "timeout": 300000
     }
   },
   "hooks": {

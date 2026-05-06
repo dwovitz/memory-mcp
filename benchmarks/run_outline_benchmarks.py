@@ -16,6 +16,7 @@ from benchmarks.outline_benchmark_runner import (
     format_preflight_plan,
     load_cases,
     preflight_run_plan,
+    resolve_agent_command,
     run_benchmark_suite,
     select_cases,
     select_variants,
@@ -27,7 +28,8 @@ from benchmarks.outline_benchmark_runner import (
 def main() -> int:
     parser = argparse.ArgumentParser(description="Run Outline memory benchmark prompts.")
     parser.add_argument("--outline-repo", default="D:\\git\\ai\\outline")
-    parser.add_argument("--agent-command", required=True)
+    parser.add_argument("--agent-command")
+    parser.add_argument("--agent-profile", choices=("codex", "claude"))
     parser.add_argument("--cases", default="")
     parser.add_argument("--variants", default="baseline,memory")
     parser.add_argument("--iterations", type=int, default=1)
@@ -63,6 +65,13 @@ def main() -> int:
         explicit_cases=bool(requested_cases),
     )
     preflight = preflight_run_plan(plan, allow_large_token_run=args.allow_large_token_run)
+    try:
+        agent_command = resolve_agent_command(
+            agent_command=args.agent_command,
+            agent_profile=args.agent_profile,
+        )
+    except ValueError as error:
+        parser.error(str(error))
 
     if args.dry_run:
         print(format_preflight_plan(preflight))
@@ -73,7 +82,7 @@ def main() -> int:
     run_dir = create_run_directory(args.results_dir)
     results = run_benchmark_suite(
         plan,
-        agent_command=args.agent_command,
+        agent_command=agent_command,
         run_dir=run_dir,
         timeout_seconds=args.timeout_seconds,
         apply_improvement_prompt=args.apply_improvement_prompt,

@@ -81,7 +81,7 @@ def test_benchmark_cases_are_task_oriented() -> None:
 
     assert {"feature_work", "bug_fix", "validation_planning"}.issubset(categories)
     assert "information_regurgitation" not in categories
-    assert {case["project"] for case in cases} == {"outline"}
+    assert {"outline", "ai-os-discord"}.issubset({case["project"] for case in cases})
 
 
 def test_benchmark_cases_include_complex_feature_updates() -> None:
@@ -122,7 +122,7 @@ def test_outline_benchmark_prompts_exist_for_cases() -> None:
         assert any("variant: baseline" in text for text in case_prompts.values())
         assert any("variant: memory" in text for text in case_prompts.values())
         memory_prompt = "\n".join(text for text in case_prompts.values() if "variant: memory" in text)
-        assert 'project="outline"' in memory_prompt
+        assert f'project="{case["project"]}"' in memory_prompt
         assert "memory_used: yes" in memory_prompt
         assert "`source_read_limits`" in memory_prompt or "source_read_limits" in memory_prompt
         assert "source_files_read_count:" in memory_prompt

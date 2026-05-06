@@ -8,6 +8,7 @@ from pathlib import Path
 
 from benchmarks.outline_benchmark_runner import (
     AgentExecution,
+    AGENT_COMMAND_PROFILES,
     DEFAULT_BUDGET_PROFILES,
     ParsedBenchmarkResult,
     build_run_plan,
@@ -21,6 +22,7 @@ from benchmarks.outline_benchmark_runner import (
     run_benchmark_suite,
     run_docker_update,
     run_planned_benchmark,
+    resolve_agent_command,
     select_cases,
     select_variants,
     validate_result,
@@ -106,6 +108,34 @@ def test_select_variants_rejects_unknown_variant() -> None:
         raise AssertionError("expected invalid variant to raise")
 
 
+def test_resolve_agent_command_supports_codex_and_claude_profiles() -> None:
+    assert resolve_agent_command(agent_command=None, agent_profile="codex") == AGENT_COMMAND_PROFILES["codex"]
+    assert resolve_agent_command(agent_command=None, agent_profile="claude") == AGENT_COMMAND_PROFILES["claude"]
+
+
+def test_codex_agent_profile_uses_exec_supported_flags() -> None:
+    command = AGENT_COMMAND_PROFILES["codex"]
+
+    assert command.startswith("codex exec ")
+    assert "--ask-for-approval" not in command
+    assert command.endswith(" -")
+
+
+def test_resolve_agent_command_prefers_explicit_command() -> None:
+    command = resolve_agent_command(agent_command="python fake_agent.py", agent_profile="codex")
+
+    assert command == "python fake_agent.py"
+
+
+def test_resolve_agent_command_requires_command_or_profile() -> None:
+    try:
+        resolve_agent_command(agent_command=None, agent_profile=None)
+    except ValueError as error:
+        assert "pass --agent-command or --agent-profile" in str(error)
+    else:
+        raise AssertionError("expected missing agent command to raise")
+
+
 def test_discover_prompt_finds_case_variant_file(tmp_path: Path) -> None:
     prompt = tmp_path / "01a-baseline-outline-feature.md"
     prompt.write_text("case_id", encoding="utf-8")
@@ -136,6 +166,127 @@ def test_build_run_plan_includes_case_metadata(tmp_path: Path) -> None:
     assert plan[0].mode == "targeted"
     assert plan[0].budget.max_total_tokens == DEFAULT_BUDGET_PROFILES["targeted"].max_total_tokens
     assert plan[0].estimated_prompt_tokens > 0
+
+
+def test_build_run_plan_includes_plan_only_validation_metadata(tmp_path: Path) -> None:
+    prompt = tmp_path / "07a-baseline-ai-os-discord-review-expiry-plan.md"
+    prompt.write_text("prompt", encoding="utf-8")
+    cases = [
+        {
+            "id": "ai_os_discord_review_expiry_plan",
+            "project": "ai-os-discord",
+            "repository_path": "D:\\git\\ai\\ai-os-discord",
+            "category": "plan_only",
+            "expected_files_inspected": [
+                "src/AiOs.Bot/Services/ReviewExpiryService.cs",
+                "tests/AiOs.Bot.Tests/Services/EnrichmentBackgroundServiceTests.cs",
+            ],
+            "expected_plan_terms": ["ReviewExpiryService", "dotnet test"],
+        }
+    ]
+
+    plan = build_run_plan(cases, ["baseline"], tmp_path, iterations=1)
+
+    assert plan[0].project == "ai-os-discord"
+    assert plan[0].repository_path == "D:\\git\\ai\\ai-os-discord"
+    assert plan[0].expected_files_inspected == [
+        "src/AiOs.Bot/Services/ReviewExpiryService.cs",
+        "tests/AiOs.Bot.Tests/Services/EnrichmentBackgroundServiceTests.cs",
+    ]
+    assert plan[0].expected_plan_terms == ["ReviewExpiryService", "dotnet test"]
+
+
+def test_validate_result_enforces_plan_only_file_gathering(tmp_path: Path) -> None:
+    prompt = tmp_path / "07a-baseline-ai-os-discord-review-expiry-plan.md"
+    prompt.write_text("prompt", encoding="utf-8")
+    planned = build_run_plan(
+        [
+            {
+                "id": "ai_os_discord_review_expiry_plan",
+                "project": "ai-os-discord",
+                "repository_path": "D:\\git\\ai\\ai-os-discord",
+                "category": "plan_only",
+                "expected_files_inspected": [
+                    "src/AiOs.Bot/Services/ReviewExpiryService.cs",
+                    "tests/AiOs.Bot.Tests/Services/EnrichmentBackgroundServiceTests.cs",
+                ],
+                "expected_plan_terms": ["ReviewExpiryService", "dotnet test"],
+            }
+        ],
+        ["baseline"],
+        tmp_path,
+        iterations=1,
+    )[0]
+    parsed = ParsedBenchmarkResult(
+        fields={
+            "case_id": "ai_os_discord_review_expiry_plan",
+            "project": "ai-os-discord",
+            "variant": "baseline",
+            "worktree": "D:\\git\\ai\\ai-os-discord-benchmarks\\case\\baseline",
+            "branch": "benchmark/ai-os-discord-review-expiry-plan-baseline",
+            "memory_used": "no",
+            "files_inspected": "src/AiOs.Bot/Services/ReviewExpiryService.cs",
+            "files_changed": "none",
+            "tests_or_commands_recommended": "dotnet test AiOs.sln --filter ReviewExpiryService",
+            "outcome": "plan_ready",
+            "notes": "Inspect ReviewExpiryService before planning the change.",
+        },
+        block_text="BENCHMARK_RESULT",
+    )
+
+    validation = validate_result(parsed, planned=planned)
+
+    assert validation.valid is False
+    assert (
+        "missing expected inspected file: tests/AiOs.Bot.Tests/Services/EnrichmentBackgroundServiceTests.cs"
+        in validation.errors
+    )
+
+
+def test_validate_result_accepts_plan_only_result_with_expected_files(tmp_path: Path) -> None:
+    prompt = tmp_path / "07a-baseline-ai-os-discord-review-expiry-plan.md"
+    prompt.write_text("prompt", encoding="utf-8")
+    planned = build_run_plan(
+        [
+            {
+                "id": "ai_os_discord_review_expiry_plan",
+                "project": "ai-os-discord",
+                "repository_path": "D:\\git\\ai\\ai-os-discord",
+                "category": "plan_only",
+                "expected_files_inspected": [
+                    "src/AiOs.Bot/Services/ReviewExpiryService.cs",
+                    "tests/AiOs.Bot.Tests/Services/EnrichmentBackgroundServiceTests.cs",
+                ],
+                "expected_plan_terms": ["ReviewExpiryService", "dotnet test"],
+            }
+        ],
+        ["baseline"],
+        tmp_path,
+        iterations=1,
+    )[0]
+    parsed = ParsedBenchmarkResult(
+        fields={
+            "case_id": "ai_os_discord_review_expiry_plan",
+            "project": "ai-os-discord",
+            "variant": "baseline",
+            "worktree": "D:\\git\\ai\\ai-os-discord-benchmarks\\case\\baseline",
+            "branch": "benchmark/ai-os-discord-review-expiry-plan-baseline",
+            "memory_used": "no",
+            "files_inspected": (
+                "src/AiOs.Bot/Services/ReviewExpiryService.cs; "
+                "tests/AiOs.Bot.Tests/Services/EnrichmentBackgroundServiceTests.cs"
+            ),
+            "files_changed": "none",
+            "tests_or_commands_recommended": "dotnet test AiOs.sln --filter ReviewExpiryService",
+            "outcome": "plan_ready",
+            "notes": "ReviewExpiryService plan is ready after source inspection.",
+        },
+        block_text="BENCHMARK_RESULT",
+    )
+
+    validation = validate_result(parsed, planned=planned)
+
+    assert validation.valid is True
 
 
 def test_smoke_mode_reduces_plan_when_cases_are_not_explicit(tmp_path: Path) -> None:

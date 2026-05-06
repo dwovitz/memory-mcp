@@ -1,6 +1,6 @@
 # memory-mcp Workflow
 
-Use the `memory` MCP server for durable project memory across coding sessions.
+Use the `memory-mcp` MCP server for durable project memory across coding sessions.
 
 ## Before Substantial Work
 
@@ -21,72 +21,75 @@ Inspect the response fields before reading source files:
 - `source_read_policy` — `answer_from_packet | verify_narrowly | mark_weak_context`
 - `source_read_budget_tokens` — how many tokens of source reading are budgeted
 
-## The 9 MCP Tools
+## MCP Tools
 
-### Retrieval (two-stage)
+### Retrieval
 
-**Stage 1 — slim search (no details):**
 ```
-memory_search(query, scope?, workspace_id?, project_id?, kind?, limit?)
+search_memory(query, memory_scope?, workspace?, project?, component?, topic?, memory_type?, include_sensitive?, limit?)
 ```
-Returns compact records. Use this before fetching full content.
+Searches memory records and returns compact matching entries.
 
-**Stage 2 — deep fetch:**
 ```
-memory_get(ids: list[str])
+get_context_packet(request, workspace?, project?, component?, topic?, include_global?, include_sensitive?, max_memories?, max_tokens?, if_cache_version?)
 ```
-Returns full records including `details`. Call only for IDs surfaced by search.
+Builds a task-specific packet with preferences, facts, checkpoints, quality diagnostics, cache metadata, and source-read guidance.
 
-**Timeline (no query needed):**
 ```
-memory_timeline(scope?, workspace_id?, project_id?, since?, limit?, kind?)
+get_memory_cache_state()
 ```
-Chronological listing — useful for finding checkpoints to resume from.
+Returns cache metadata for cache-aware retrieval.
 
 ### Writing
 
 ```
-memory_save(title, summary, details?, kind?, scope?, workspace_id?, project_id?, tags?, confidence?)
+add_memory(summary, content, memory_type?, memory_scope?, workspace?, project?, component?, topic?, applies_to?, tags?, confidence?, sensitivity?)
 ```
-Deduplicates automatically — close title match in the same scope+kind updates instead of inserting.
+Adds a memory when mutation tools are enabled.
 
 ```
-memory_update(id, title?, summary?, details?, tags?, kind?, confidence?)
+supersede_memory(memory_id, summary?, content?, reason?, tags?, confidence?)
+```
+Replaces stale memory content with an updated version.
+
+```
+archive_memory(memory_id)
+```
+Archives obsolete memory.
+
+### Domain Helpers
+
+```
+list_preferences(domain?, project?, include_sensitive?)
 ```
 
 ```
-memory_delete(ids: list[str])
+list_liked_media(person_id?, domain?, limit?)
 ```
 
-### Session Management
+```
+list_disliked_media(person_id?, domain?, limit?)
+```
 
 ```
-memory_checkpoint(task, state, next_steps?, blockers?, files_changed?, commands_run?, scope?, workspace_id?, project_id?)
+summarize_domain_profile(domain, person_id?, project?, include_sensitive?)
 ```
-Saves a resumable work checkpoint. Call at the end of long sessions.
+
+Sensitive helpers are disabled unless explicitly enabled:
 
 ```
-memory_prune(dry_run=True, older_than_days?, scope?, workspace_id?, project_id?, kind?)
+list_medications_for_person(person_id, include_evidence?)
 ```
-Default is dry-run — inspect before deleting.
 
-### Context Synthesis
+Maintenance:
 
 ```
-get_context_packet(request, workspace?, project?, component?, workspace_id?, project_id?, max_memories?, max_tokens?)
+run_pruning_pass(dry_run?, memory_scope?, workspace?, project?, older_than_days?)
 ```
-Two-stage internally: slim search → deep fetch of top results → structured packet.
-Returns `preferences`, `facts`, `checkpoints`, `context_quality`, `suggested_next_action`, `source_read_policy`, `source_read_budget_tokens`.
 
 ## Scopes
 
-| Situation | scope |
-|---|---|
-| Universal rule for all projects | `global` |
-| Decision spanning multiple repos in the ecosystem | `workspace` |
-| Fact about one specific repo | `project` |
-
-Always pass `workspace_id` and/or `project_id` when saving `workspace` or `project` scoped memories.
+Use `memory_scope="global"` for universal rules, `workspace` for decisions spanning multiple repos, `project` for repo facts, and `component` for subsystem facts. Always pass `workspace` and/or `project` when saving workspace or project scoped memories.
 
 ## Source-Read Discipline
 
@@ -98,12 +101,42 @@ Use `source_read_policy` from the context packet:
 ## After Meaningful Work
 
 Refresh memory with durable, non-sensitive facts:
-- Architecture decisions (`kind=architecture`)
-- Non-obvious commands (`kind=command`)
-- Environment constraints (`kind=environment`)
-- Bugs with root cause (`kind=bug`)
-- Confirmed workflow preferences (`kind=preference`)
+- Architecture decisions (`memory_type="architecture_decision"`)
+- Non-obvious commands or workflows (`memory_type="project_rule"` or `memory_type="workflow_location"`)
+- Environment constraints (`memory_type="project_fact"`)
+- Bugs with root cause (`memory_type="project_fact"`)
+- Confirmed workflow preferences (`memory_type="coding_preference"`)
 
 Do **not** save: speculation, code-derivable facts, `<private>` content, secrets, or credentials.
 
 Report `project_memory_refreshed: yes/no` in task closeout.
+
+## Code Exploration — Graph First
+
+Use code-review-graph MCP tools before Grep/Glob/Read:
+
+- `semantic_search_nodes` or `query_graph` for symbols, imports, callers, callees, and tests.
+- `get_impact_radius` before edits that may affect callers or dependents.
+- `detect_changes` plus `get_review_context` for code review.
+- `get_architecture_overview` for architecture questions.
+
+Fall back to file reads only when the graph does not cover what you need or the graph tool is unavailable. If unavailable, state that and keep reads bounded.
+
+## Model Routing
+
+When dispatching Claude Code subagents, use the smallest model that preserves quality:
+
+- File search, codebase exploration, log scanning: Haiku, read-only, capped output.
+- Implementation, editing code, writing tests: Sonnet or inherited default.
+- Architecture decisions, complex debugging, deep reasoning: Opus only when Sonnet is insufficient.
+
+If the active client does not expose per-agent model selection, keep the default model and preserve the same read-only/capped-output subagent discipline.
+
+## Agent Dispatch Patterns
+
+Spawn a subagent when:
+- A task is purely read-only search, summarization, or log scanning.
+- Two or more independent tasks can run in parallel.
+- A task would produce large output the main session does not need verbatim.
+
+Always brief subagents with the task goal, relevant paths or search terms, output format, word cap, and whether they are read-only or may edit.

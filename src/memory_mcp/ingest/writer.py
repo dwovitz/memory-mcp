@@ -13,6 +13,10 @@ class IngestWriter:
 
     Uses ``metadata.ingest_key`` to detect existing memories. On re-run,
     supersedes the existing memory rather than creating a duplicate.
+
+    Note: embeddings are NOT computed at write time (lazy embedding design).
+    Run ``scripts/backfill_embeddings.py`` after ingestion to populate the
+    ``embedding`` column and enable vector re-ranking for ingested memories.
     """
 
     def __init__(self, service: MemoryService) -> None:

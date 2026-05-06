@@ -284,5 +284,71 @@
         "project:outline"
       ]
     }
+  },
+  {
+    "id": "ai_os_discord_review_expiry_plan",
+    "category": "plan_only",
+    "complexity": "complex",
+    "touchpoints": [
+      "discord-bot",
+      "review-expiry",
+      "background-service",
+      "tests"
+    ],
+    "request": "Prepare to implement a change that makes ai-os-discord review expiry handling observable and testable, stopping after source inspection and a concrete change plan.",
+    "workspace": "ai",
+    "project": "ai-os-discord",
+    "component": "bot",
+    "repository_path": "D:\\git\\ai\\ai-os-discord",
+    "expected_files_inspected": [
+      "src/AiOs.Bot/Services/ReviewExpiryService.cs",
+      "src/AiOs.Bot/Configuration/ReviewOptions.cs"
+    ],
+    "expected_plan_terms": [
+      "ReviewExpiryService",
+      "ReviewOptions",
+      "dotnet test"
+    ],
+    "max_memories": 6,
+    "max_tokens": 320,
+    "memories": [
+      {
+        "memory_type": "component_summary",
+        "summary": "ai-os-discord bot background-service changes should inspect service, options, registration, and focused tests before planning edits.",
+        "content": "ai-os-discord bot background-service changes should inspect the target service, related options, dependency registration, and focused tests before planning edits. Review expiry behavior lives near the bot service layer and should be validated with narrow .NET tests before any implementation.",
+        "applies_to": {
+          "memory_scope": "component",
+          "workspace": "ai",
+          "project": "ai-os-discord",
+          "component": "bot"
+        }
+      },
+      {
+        "memory_type": "project_rule",
+        "summary": "ai-os-discord benchmark plans should identify exact .NET files and commands before edits.",
+        "content": "For ai-os-discord benchmark runs, a plan-only answer is not accurate unless it identifies exact source files, exact test files, and a concrete dotnet test command before making or proposing edits.",
+        "applies_to": {
+          "memory_scope": "project",
+          "workspace": "ai",
+          "project": "ai-os-discord"
+        }
+      }
+    ],
+    "expected": {
+      "domain": "project",
+      "context_quality": "strong",
+      "suggested_next_action": "inspect_budget_then_edit",
+      "source_read_policy": "implementation_required",
+      "min_source_read_budget_tokens": 4000,
+      "min_token_reduction_percent": 20,
+      "facts_include": [
+        "background-service changes should inspect",
+        "exact .NET files and commands"
+      ],
+      "matched_scopes_include": [
+        "component:ai-os-discord/bot",
+        "project:ai-os-discord"
+      ]
+    }
   }
 ]

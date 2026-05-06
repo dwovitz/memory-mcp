@@ -38,6 +38,10 @@ MEMORY_RESULT_FIELDS = (
 RUN_MODES = ("smoke", "targeted", "full")
 STDOUT_TAIL_CHARACTERS = 12_000
 STDERR_TAIL_CHARACTERS = 12_000
+AGENT_COMMAND_PROFILES = {
+    "codex": "codex exec --sandbox danger-full-access -",
+    "claude": "claude -p --permission-mode bypassPermissions --output-format text",
+}
 
 
 @dataclass(frozen=True)
@@ -104,12 +108,16 @@ class PlannedRun:
     """One benchmark prompt execution planned by the runner."""
 
     case_id: str
+    project: str
+    repository_path: str | None
     variant: str
     iteration: int
     prompt_path: Path
     category: str
     complexity: str | None
     touchpoints: list[str]
+    expected_files_inspected: list[str]
+    expected_plan_terms: list[str]
     mode: str
     budget: BudgetProfile
     estimated_prompt_tokens: int
@@ -197,7 +205,7 @@ def parse_benchmark_result(output: str) -> ParsedBenchmarkResult:
     return ParsedBenchmarkResult(fields=fields, block_text=block_text)
 
 
-def validate_result(parsed: ParsedBenchmarkResult) -> ResultValidation:
+def validate_result(parsed: ParsedBenchmarkResult, *, planned: PlannedRun | None = None) -> ResultValidation:
     """Validate required benchmark result fields and variant-specific rules."""
 
     errors: list[str] = []
@@ -205,7 +213,7 @@ def validate_result(parsed: ParsedBenchmarkResult) -> ResultValidation:
         errors.append("missing BENCHMARK_RESULT block")
 
     for field in REQUIRED_RESULT_FIELDS:
-        if not parsed.fields.get(field):
+        if not _result_field_value(parsed, field):
             errors.append(f"missing required field: {field}")
 
     variant = parsed.fields.get("variant", "").lower()
@@ -217,6 +225,9 @@ def validate_result(parsed: ParsedBenchmarkResult) -> ResultValidation:
         for field in MEMORY_RESULT_FIELDS:
             if not parsed.fields.get(field):
                 errors.append(f"missing memory field: {field}")
+
+    if planned is not None and planned.category == "plan_only":
+        errors.extend(_validate_plan_only_result(parsed, planned))
 
     return ResultValidation(valid=not errors, errors=errors)
 
@@ -305,12 +316,16 @@ def build_run_plan(
                 planned.append(
                     PlannedRun(
                         case_id=case["id"],
+                        project=case.get("project", "outline"),
+                        repository_path=case.get("repository_path"),
                         variant=variant,
                         iteration=iteration,
                         prompt_path=prompt_path,
                         category=case.get("category", "unknown"),
                         complexity=case.get("complexity"),
                         touchpoints=list(case.get("touchpoints", [])),
+                        expected_files_inspected=list(case.get("expected_files_inspected", [])),
+                        expected_plan_terms=list(case.get("expected_plan_terms", [])),
                         mode=mode,
                         budget=budget,
                         estimated_prompt_tokens=estimated_prompt_tokens,
@@ -455,6 +470,20 @@ def run_agent(agent_command: str, prompt_text: str, *, timeout_seconds: int) -> 
         )
 
 
+def resolve_agent_command(*, agent_command: str | None, agent_profile: str | None) -> str:
+    """Resolve an explicit agent command or a named built-in command profile."""
+
+    if agent_command:
+        return agent_command
+    if agent_profile:
+        try:
+            return AGENT_COMMAND_PROFILES[agent_profile]
+        except KeyError as error:
+            profiles = ", ".join(sorted(AGENT_COMMAND_PROFILES))
+            raise ValueError(f"unknown agent profile: {agent_profile}; expected one of: {profiles}") from error
+    raise ValueError("pass --agent-command or --agent-profile")
+
+
 def run_planned_benchmark(
     planned: PlannedRun,
     *,
@@ -497,7 +526,7 @@ def run_planned_benchmark(
     else:
         execution = agent_runner(agent_command, prompt_text)
     parsed = parse_benchmark_result(execution.stdout)
-    validation = validate_result(parsed)
+    validation = validate_result(parsed, planned=planned)
     errors = list(validation.errors)
     if execution.timed_out:
         errors.append("agent command timed out")
@@ -677,11 +706,15 @@ def write_summary_markdown(results: list[BenchmarkRunResult], output_path: Path)
 def _result_to_dict(result: BenchmarkRunResult) -> dict[str, Any]:
     return {
         "case_id": result.planned.case_id,
+        "project": result.planned.project,
+        "repository_path": result.planned.repository_path or "unknown",
         "iteration": result.planned.iteration,
         "variant": result.planned.variant,
         "category": result.planned.category,
         "complexity": result.planned.complexity,
         "touchpoints": result.planned.touchpoints,
+        "expected_files_inspected": result.planned.expected_files_inspected,
+        "expected_plan_terms": result.planned.expected_plan_terms,
         "prompt_path": str(result.planned.prompt_path),
         "artifact_dir": str(result.artifact_dir),
         "command": result.execution.command,
@@ -732,6 +765,48 @@ def _effective_budget(case: dict[str, Any], default_budget: BudgetProfile) -> Bu
     if invalid:
         raise ValueError("unknown budget override: " + ", ".join(sorted(invalid)))
     return default_budget.replace(**{key: int(value) for key, value in overrides.items()})
+
+
+def _result_field_value(parsed: ParsedBenchmarkResult, field: str) -> str:
+    aliases = {
+        "tests_run": ("tests_run", "tests_or_commands_recommended"),
+    }
+    for key in aliases.get(field, (field,)):
+        value = parsed.fields.get(key, "")
+        if value:
+            return value
+    return ""
+
+
+def _validate_plan_only_result(parsed: ParsedBenchmarkResult, planned: PlannedRun) -> list[str]:
+    errors: list[str] = []
+    files_changed = parsed.fields.get("files_changed", "").strip().lower()
+    if files_changed not in ("", "none", "n/a", "no", "no files changed"):
+        errors.append("plan_only result reported files_changed")
+
+    files_inspected = parsed.fields.get("files_inspected", "")
+    if not files_inspected.strip():
+        errors.append("plan_only result missing files_inspected")
+    for expected_file in planned.expected_files_inspected:
+        if expected_file not in files_inspected:
+            errors.append(f"missing expected inspected file: {expected_file}")
+
+    plan_text = " ".join(
+        [
+            parsed.fields.get("files_inspected", ""),
+            parsed.fields.get("files_changed", ""),
+            parsed.fields.get("tests_or_commands_recommended", ""),
+            parsed.fields.get("tests_run", ""),
+            parsed.fields.get("outcome", ""),
+            parsed.fields.get("notes", ""),
+        ]
+    )
+    if not _result_field_value(parsed, "tests_run").strip():
+        errors.append("plan_only result missing tests_or_commands_recommended")
+    for expected_term in planned.expected_plan_terms:
+        if expected_term not in plan_text:
+            errors.append(f"missing expected plan term: {expected_term}")
+    return errors
 
 
 def _planned_budget_exception(planned: PlannedRun) -> str:

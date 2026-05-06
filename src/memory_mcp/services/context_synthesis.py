@@ -9,6 +9,7 @@ from typing import Any, Protocol
 
 from sqlalchemy.orm import Session
 
+from memory_mcp.embeddings.config import get_embedding_service
 from memory_mcp.models import Memory
 from memory_mcp.retrieval import (
     HybridRetrievalService,
@@ -21,6 +22,7 @@ from memory_mcp.scopes import (
     GLOBAL_MEMORY_SCOPE,
     PROJECT_KEY,
     PROJECT_MEMORY_SCOPE,
+    REPO_KEY,
     SCOPE_PATH_KEY,
     TOPIC_KEY,
     WORKSPACE_KEY,
@@ -272,7 +274,7 @@ class ContextSynthesisService:
     ) -> None:
         if retriever is None and session is None:
             raise ValueError("Either session or retriever is required")
-        self.retriever = retriever or HybridRetrievalService(session)  # type: ignore[arg-type]
+        self.retriever = retriever or HybridRetrievalService(session, embedding_service=get_embedding_service(session))  # type: ignore[arg-type]
 
     def classify_request(self, request: str) -> RequestClassification:
         normalized = request.lower()
@@ -342,6 +344,7 @@ class ContextSynthesisService:
         applies_to: dict[str, Any] | None = None,
         sensitivities: Sequence[str] | None = ("normal",),
         workspace: str | None = None,
+        repo: str | None = None,
         project: str | None = None,
         component: str | None = None,
         topic: str | None = None,
@@ -371,6 +374,7 @@ class ContextSynthesisService:
         }
         results = self._search_relevant_memories(
             workspace=workspace,
+            repo=repo,
             project=project,
             component=component,
             topic=topic,
@@ -389,6 +393,7 @@ class ContextSynthesisService:
         if fallback_reason:
             fallback_results = self._search_relevant_memories(
                 workspace=workspace,
+                repo=repo,
                 project=project,
                 component=None,
                 topic=None,
@@ -476,6 +481,7 @@ class ContextSynthesisService:
         self,
         *,
         workspace: str | None,
+        repo: str | None = None,
         project: str | None,
         component: str | None,
         topic: str | None,
@@ -508,6 +514,7 @@ class ContextSynthesisService:
         if callable(hierarchical_search):
             return hierarchical_search(
                 workspace=workspace,
+                repo=repo,
                 project=project,
                 component=component,
                 topic=topic,
@@ -522,6 +529,7 @@ class ContextSynthesisService:
                     search_kwargs.get("applies_to"),
                     memory_scope=COMPONENT_MEMORY_SCOPE,
                     workspace=workspace,
+                    repo=repo,
                     project=project,
                     component=component,
                     topic=topic,
@@ -533,6 +541,7 @@ class ContextSynthesisService:
                     search_kwargs.get("applies_to"),
                     memory_scope=PROJECT_MEMORY_SCOPE,
                     workspace=workspace,
+                    repo=repo,
                     project=project,
                 )
             )
@@ -541,6 +550,7 @@ class ContextSynthesisService:
                 with_memory_scope(
                     without_applies_to_keys(
                         search_kwargs.get("applies_to"),
+                        REPO_KEY,
                         PROJECT_KEY,
                         COMPONENT_KEY,
                         TOPIC_KEY,
@@ -555,6 +565,7 @@ class ContextSynthesisService:
                     without_applies_to_keys(
                         search_kwargs.get("applies_to"),
                         WORKSPACE_KEY,
+                        REPO_KEY,
                         PROJECT_KEY,
                         COMPONENT_KEY,
                         TOPIC_KEY,
@@ -900,6 +911,8 @@ def _source_read_decision(
 ) -> tuple[str, str, int]:
     if context_quality in {"miss", "weak"}:
         return "none", "mark_weak_context", NO_SOURCE_READ_BUDGET_TOKENS
+    if implementation_request and context_quality == "strong":
+        return "implementation_required", "inspect_budget_then_edit", IMPLEMENTATION_SOURCE_BUDGET_TOKENS
     if broad_project_request:
         if context_quality == "strong":
             return "path_enum_only", "answer_from_packet", NO_SOURCE_READ_BUDGET_TOKENS

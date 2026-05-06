@@ -36,3 +36,45 @@ Fall back to Grep/Glob/Read **only** when the graph doesn't cover what you need.
 2. Use `detect_changes` for code review.
 3. Use `get_affected_flows` to understand impact.
 4. Use `query_graph` pattern="tests_for" to check coverage.
+
+## Memory
+
+Use `memory-mcp` as the durable context layer for the same workflows Codex uses.
+
+Before substantial implementation, review, debugging, or planning, call `get_context_packet` with the narrowest useful scope:
+
+```text
+workspace="ai"
+project="memory-mcp"
+component="<subsystem when clear>"
+include_global=true
+include_sensitive=false
+```
+
+Inspect `context_quality`, `warnings`, `suggested_next_action`, `source_read_policy`, and `source_read_budget_tokens` before reading source. If context is weak or misses the project/component, retry once at project scope before broad source reads.
+
+For source reads:
+- `answer_from_packet`: answer from memory and skip source reads.
+- `verify_narrowly`: read only the specific snippets needed to confirm the packet.
+- `mark_weak_context`: inspect source before answering, but keep reads bounded.
+
+After meaningful changes, refresh memory with compact, non-sensitive project facts, decisions, commands, constraints, and workflow updates. Never store secrets, credentials, raw logs, transcripts, or sensitive customer data.
+
+## Model Routing
+
+When dispatching Claude Code subagents, use the smallest model that preserves quality:
+
+- File search, codebase exploration, log scanning: Haiku, read-only, capped output.
+- Implementation, editing code, writing tests: Sonnet or inherited default.
+- Architecture decisions, complex debugging, deep reasoning: Opus only when Sonnet is insufficient.
+
+If the active client does not expose per-agent model selection, keep the default model and preserve the same read-only/capped-output subagent discipline.
+
+## Agent Dispatch Patterns
+
+Spawn a subagent when:
+- A task is purely read-only search, summarization, or log scanning.
+- Two or more independent tasks can run in parallel.
+- A task would produce large output the main session does not need verbatim.
+
+Always brief subagents with the task goal, relevant paths or search terms, output format, word cap, and whether they are read-only or may edit.

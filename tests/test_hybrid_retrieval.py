@@ -71,11 +71,12 @@ def test_search_memories_statement_matches_exact_scope_path() -> None:
     assert "scope_path" not in sql
 
 
-def test_search_memories_rejects_vector_query_until_pipeline_exists() -> None:
+def test_search_memories_with_query_embedding_falls_back_to_fts() -> None:
+    # query_embedding param is accepted but ignored (FTS path used; vector re-rank
+    # is driven by embedding_service, not query_embedding).
     service = HybridRetrievalService(FakeSession())
-
-    with pytest.raises(NotImplementedError, match="Vector search is scaffolded only"):
-        service.search_memories(query_embedding=[0.1, 0.2, 0.3])
+    results = service.search_memories(query_embedding=[0.1, 0.2, 0.3])
+    assert isinstance(results, list)
 
 
 def test_search_entities_statement_filters_type_status_scope_and_confidence() -> None:
