@@ -1,0 +1,28 @@
+# Example manifest file for workspace ingestion.
+# Run with: python scripts/ingest_workspace.py --manifest ingest.manifest.yaml.example
+#
+# All paths are resolved relative to this manifest file.
+
+sources:
+  # Ingest all Markdown files under docs/ as project facts
+  - path: docs/
+    type: markdown
+    scope:
+      workspace: myworkspace
+      project: myproject
+
+  # Ingest a single architecture diagram file, extracting mermaid node labels
+  - path: docs/architecture.md
+    type: mermaid
+    scope:
+      workspace: myworkspace
+      project: myproject
+      component: architecture
+
+  # Ingest Terraform APIM route definitions from a specific .tf file
+  - path: infra/apim_routes.tf
+    type: apim_terraform
+    scope:
+      workspace: myworkspace
+      project: myproject
+      component: api-gateway
