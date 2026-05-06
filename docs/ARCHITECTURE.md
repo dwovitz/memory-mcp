@@ -138,6 +138,8 @@ erDiagram
 | `list_medications_for_person` | Retrieve medication memories for an explicit person ID. |
 | `summarize_domain_profile` | Summarize a domain as a bounded context packet. |
 | `run_pruning_pass` | Archive, supersede, compress, and decay memory according to pruning rules. |
+| `search_entities` | Search named entities by text query, type, workspace, or repo. |
+| `get_memory_cache_state` | Return a version token for cache validation. |
 
 ## Retrieval Flow
 
@@ -200,6 +202,34 @@ Use these scopes when the project, component, and workspace are enough:
 
 Use `scope_path` when context needs more layers, such as repo, app, module,
 branch, feature, or session.
+
+#### `repo` parameter
+
+Write tools (add_memory, supersede_memory) and read tools (search_memory,
+get_context_packet, list_preferences, summarize_domain_profile) all accept a
+`repo` parameter. When `repo` is provided and `project` is omitted, the server
+treats them as equivalent — so callers in a multi-repo workspace can use `repo`
+as the natural vocabulary without changing retrieval behavior.
+
+The `repo` value is also stored in `applies_to.repo` for future index support.
+
+#### Canonical `scope_path` prefixes
+
+When the classic four-layer hierarchy is not enough, use `scope_path` with
+these canonical prefixes so that different clients stay consistent:
+
+| Prefix | Example | Meaning |
+| --- | --- | --- |
+| `workspace:` | `workspace:mycompany` | Top-level workspace |
+| `repo:` | `repo:my-service` | Git repository |
+| `project:` | `project:my-service` | Logical project (often same as repo) |
+| `component:` | `component:api` | Subsystem within a project |
+| `topic:` | `topic:auth` | Subject area within a component |
+| `branch:` | `branch:main` | Branch-local truth |
+| `feature:` | `feature:dark-mode` | In-progress feature context |
+
+Example: a component-level fact scoped to a specific branch:
+  scope_path=["workspace:mycompany", "repo:my-service", "component:api", "branch:feat-x"]
 
 ```mermaid
 flowchart LR

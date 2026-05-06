@@ -7,6 +7,7 @@ from datetime import datetime
 from decimal import Decimal
 import json
 import os
+import re
 from pathlib import Path
 from typing import Any
 from uuid import UUID
@@ -28,12 +29,13 @@ from memory_mcp.auth.context import get_current_principal
 from memory_mcp.db import session_scope
 from memory_mcp.models import Entity, Memory, MemoryTag, Relationship
 from memory_mcp.pruning import PruningService
-from memory_mcp.retrieval import HybridRetrievalService, MemorySearchResult
+from memory_mcp.retrieval import EntitySearchResult, HybridRetrievalService, MemorySearchResult
 from memory_mcp.scopes import (
     COMPONENT_MEMORY_SCOPE,
     GLOBAL_MEMORY_SCOPE,
     OVERRIDES_MEMORY_IDS_KEY,
     PROJECT_MEMORY_SCOPE,
+    REPO_KEY,
     SCOPE_PATH_KEY,
     WORKSPACE_MEMORY_SCOPE,
     with_default_scope,
@@ -76,6 +78,13 @@ MAX_SCOPE_PATH_PARTS = 32
 MAX_SCOPE_PATH_PART_CHARS = 200
 MUTATION_TOOLS_ENV = "MEMORY_MCP_ENABLE_MUTATION_TOOLS"
 SENSITIVE_TOOLS_ENV = "MEMORY_MCP_ENABLE_SENSITIVE_TOOLS"
+
+_SECRET_PATTERNS: tuple[re.Pattern[str], ...] = (
+    re.compile(r"(AKIA|AGPA|AIDA|AROA|ASCA|ASIA)[0-9A-Z]{16}"),
+    re.compile(r"-----BEGIN .{0,20}PRIVATE KEY-----"),
+    re.compile(r"[Bb]earer\s+[A-Za-z0-9\-._~+/]{20,}={0,3}"),
+    re.compile(r"AccountKey=[A-Za-z0-9+/]{20,}={0,2}"),
+)
 CACHE_NAMESPACE = "memory-data"
 CACHE_SOURCE_TABLES = (
     ("entities", Entity),
@@ -98,6 +107,7 @@ def add_memory(
     applies_to: dict[str, Any] | None = None,
     memory_scope: str | None = None,
     workspace: str | None = None,
+    repo: str | None = None,
     project: str | None = None,
     component: str | None = None,
     topic: str | None = None,
@@ -114,13 +124,15 @@ def add_memory(
 
     _require_mutation_tools_enabled()
     content = _validate_text("content", content, max_chars=MAX_TEXT_CHARS, required=True)
+    _check_content_for_secrets(content)
     summary = _validate_text("summary", summary, max_chars=MAX_SUMMARY_CHARS)
     evidence = _validate_json_payload("evidence", evidence, max_chars=MAX_JSON_CHARS)
     metadata = _validate_json_payload("metadata", metadata, max_chars=MAX_JSON_CHARS)
     applies_to = _validate_json_payload("applies_to", applies_to, max_chars=MAX_JSON_CHARS)
     memory_scope = _validate_memory_scope(memory_scope)
     workspace = _validate_text("workspace", workspace, max_chars=200)
-    project = _validate_text("project", project, max_chars=200)
+    repo = _validate_text("repo", repo, max_chars=200)
+    project = _validate_text("project", project, max_chars=200) or repo
     component = _validate_text("component", component, max_chars=200)
     topic = _validate_text("topic", topic, max_chars=200)
     scope_path = _validate_scope_path(scope_path)
@@ -148,6 +160,7 @@ def add_memory(
             applies_to=applies_to,
             memory_scope=memory_scope,
             workspace=workspace,
+            repo=repo,
             project=project,
             component=component,
             topic=topic,
@@ -257,6 +270,7 @@ def supersede_memory(
     applies_to: dict[str, Any] | None = None,
     memory_scope: str | None = None,
     workspace: str | None = None,
+    repo: str | None = None,
     project: str | None = None,
     component: str | None = None,
     topic: str | None = None,
@@ -273,13 +287,15 @@ def supersede_memory(
 
     _require_mutation_tools_enabled()
     content = _validate_text("content", content, max_chars=MAX_TEXT_CHARS, required=True)
+    _check_content_for_secrets(content)
     summary = _validate_text("summary", summary, max_chars=MAX_SUMMARY_CHARS)
     evidence = _validate_json_payload("evidence", evidence, max_chars=MAX_JSON_CHARS)
     metadata = _validate_json_payload("metadata", metadata, max_chars=MAX_JSON_CHARS)
     applies_to = _validate_json_payload("applies_to", applies_to, max_chars=MAX_JSON_CHARS)
     memory_scope = _validate_memory_scope(memory_scope)
     workspace = _validate_text("workspace", workspace, max_chars=200)
-    project = _validate_text("project", project, max_chars=200)
+    repo = _validate_text("repo", repo, max_chars=200)
+    project = _validate_text("project", project, max_chars=200) or repo
     component = _validate_text("component", component, max_chars=200)
     topic = _validate_text("topic", topic, max_chars=200)
     scope_path = _validate_scope_path(scope_path)
@@ -307,6 +323,7 @@ def supersede_memory(
             applies_to=applies_to,
             memory_scope=memory_scope,
             workspace=workspace,
+            repo=repo,
             project=project,
             component=component,
             topic=topic,
@@ -404,6 +421,7 @@ def search_memory(
     scope: str | None = None,
     applies_to: dict[str, Any] | None = None,
     workspace: str | None = None,
+    repo: str | None = None,
     project: str | None = None,
     component: str | None = None,
     topic: str | None = None,
@@ -420,7 +438,8 @@ def search_memory(
 
     query = _validate_text("query", query, max_chars=2_000)
     workspace = _validate_text("workspace", workspace, max_chars=200)
-    project = _validate_text("project", project, max_chars=200)
+    repo = _validate_text("repo", repo, max_chars=200)
+    project = _validate_text("project", project, max_chars=200) or repo
     component = _validate_text("component", component, max_chars=200)
     topic = _validate_text("topic", topic, max_chars=200)
     scope_path = _validate_scope_path(scope_path)
@@ -517,6 +536,7 @@ def get_context_packet(
     max_tokens: int = DEFAULT_CONTEXT_TOKENS,
     include_sensitive: bool = False,
     workspace: str | None = None,
+    repo: str | None = None,
     project: str | None = None,
     component: str | None = None,
     topic: str | None = None,
@@ -529,7 +549,8 @@ def get_context_packet(
 
     request = _validate_text("request", request, max_chars=2_000, required=True)
     workspace = _validate_text("workspace", workspace, max_chars=200)
-    project = _validate_text("project", project, max_chars=200)
+    repo = _validate_text("repo", repo, max_chars=200)
+    project = _validate_text("project", project, max_chars=200) or repo
     component = _validate_text("component", component, max_chars=200)
     topic = _validate_text("topic", topic, max_chars=200)
     scope_path = _validate_scope_path(scope_path)
@@ -592,6 +613,7 @@ def list_preferences(
     domain: str | None = None,
     person_id: str | None = None,
     workspace: str | None = None,
+    repo: str | None = None,
     project: str | None = None,
     component: str | None = None,
     scope_path: list[str] | None = None,
@@ -604,7 +626,8 @@ def list_preferences(
     """List active preference memories, optionally scoped by domain or person."""
 
     workspace = _validate_text("workspace", workspace, max_chars=200)
-    project = _validate_text("project", project, max_chars=200)
+    repo = _validate_text("repo", repo, max_chars=200)
+    project = _validate_text("project", project, max_chars=200) or repo
     component = _validate_text("component", component, max_chars=200)
     scope_path = _validate_scope_path(scope_path)
     limit = _bounded_int("limit", limit, minimum=1, maximum=MAX_SEARCH_LIMIT)
@@ -824,6 +847,7 @@ def summarize_domain_profile(
     domain: str,
     person_id: str | None = None,
     workspace: str | None = None,
+    repo: str | None = None,
     project: str | None = None,
     component: str | None = None,
     topic: str | None = None,
@@ -838,7 +862,8 @@ def summarize_domain_profile(
     """Summarize a domain profile as a compact context packet."""
 
     workspace = _validate_text("workspace", workspace, max_chars=200)
-    project = _validate_text("project", project, max_chars=200)
+    repo = _validate_text("repo", repo, max_chars=200)
+    project = _validate_text("project", project, max_chars=200) or repo
     component = _validate_text("component", component, max_chars=200)
     topic = _validate_text("topic", topic, max_chars=200)
     scope_path = _validate_scope_path(scope_path)
@@ -934,6 +959,63 @@ def run_pruning_pass(
             "promoted_summaries": result.promoted_summaries,
             "total_actions": result.total_actions,
             "cache": _cache_metadata(_cache_state_from_session(session), hit=False),
+        }
+
+
+@mcp.tool()
+def search_entities(
+    query: str | None = None,
+    entity_types: list[str] | None = None,
+    workspace: str | None = None,
+    repo: str | None = None,
+    project: str | None = None,
+    scope: str | None = None,
+    limit: int = 20,
+    if_cache_version: str | None = None,
+) -> dict[str, Any]:
+    """Search entities by name, type, or scope."""
+
+    query = _validate_text("query", query, max_chars=2_000)
+    workspace = _validate_text("workspace", workspace, max_chars=200)
+    repo = _validate_text("repo", repo, max_chars=200)
+    project = _validate_text("project", project, max_chars=200) or repo
+    entity_types = _validate_string_list("entity_types", entity_types, max_items=25, max_chars=64)
+    limit = _bounded_int("limit", limit, minimum=1, maximum=MAX_SEARCH_LIMIT)
+    if_cache_version = _validate_cache_version(if_cache_version)
+    _authorize_tool_call(
+        "search_entities",
+        AuthAction.READ,
+        workspace=workspace,
+        project=project,
+    )
+    applies_to: dict[str, Any] | None = None
+    if workspace or project:
+        applies_to = {}
+        if workspace:
+            applies_to["workspace"] = workspace
+        if project:
+            applies_to["project"] = project
+
+    with session_scope() as session:
+        cache_state = _cache_state_from_session(session)
+        if _cache_is_fresh(cache_state, if_cache_version):
+            return _cached_response(cache_state)
+        retrieval = HybridRetrievalService(session)
+        results = retrieval.search_entities(
+            text_query=query,
+            entity_types=_tuple_or_none(entity_types),
+            scope=scope,
+            applies_to=applies_to,
+            limit=limit,
+        )
+        return {
+            "query": query,
+            "workspace": workspace,
+            "project": project,
+            "entity_types": entity_types,
+            "count": len(results),
+            "results": [_entity_result_to_dict(result) for result in results],
+            "cache": _cache_metadata(cache_state, hit=False),
         }
 
 
@@ -1081,6 +1163,28 @@ def _tags_to_dict(tags: Sequence[Any]) -> list[dict[str, Any]]:
         }
         for tag in tags
     ]
+
+
+def _entity_result_to_dict(result: EntitySearchResult) -> dict[str, Any]:
+    entity = result.entity
+    return {
+        "id": str(entity.id),
+        "entity_type": entity.entity_type,
+        "name": entity.name,
+        "aliases": entity.aliases or [],
+        "attributes": entity.attributes or {},
+        "applies_to": entity.applies_to or {},
+        "rank_score": result.rank_score,
+    }
+
+
+def _check_content_for_secrets(content: str) -> None:
+    for pattern in _SECRET_PATTERNS:
+        if pattern.search(content):
+            raise ValueError(
+                "content appears to contain a secret or credential. "
+                "Secrets must not be stored as memories."
+            )
 
 
 def _allowed_sensitivities(include_sensitive: bool) -> tuple[str, ...]:
@@ -1320,13 +1424,14 @@ def _scoped_applies_to(
     applies_to: dict[str, Any] | None,
     memory_scope: str,
     workspace: str | None,
+    repo: str | None = None,
     project: str | None,
     component: str | None,
     topic: str | None,
 ) -> dict[str, Any]:
     if memory_scope in {COMPONENT_MEMORY_SCOPE, PROJECT_MEMORY_SCOPE, WORKSPACE_MEMORY_SCOPE}:
         applies_to = with_default_scope(applies_to)
-    return with_memory_scope(
+    result = with_memory_scope(
         applies_to,
         memory_scope=memory_scope,
         workspace=workspace,
@@ -1334,6 +1439,9 @@ def _scoped_applies_to(
         component=component,
         topic=topic,
     )
+    if repo is not None:
+        result[REPO_KEY] = repo
+    return result
 
 
 def _preference_memory_types(domain: str | None) -> tuple[str, ...]:
