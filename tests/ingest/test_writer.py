@@ -44,12 +44,11 @@ class TestIngestWriter:
     """Unit tests for IngestWriter.upsert_memories."""
 
     def _make_writer(self, find_result: Any = None) -> tuple[IngestWriter, MagicMock]:
-        """Return (writer, service_mock) with _find_by_ingest_key patched."""
+        """Return (writer, service_mock) with find_active_by_metadata_key patched."""
         service = MagicMock()
         service.memories = MagicMock()
-        service.memories.session = MagicMock()
+        service.memories.find_active_by_metadata_key = MagicMock(return_value=find_result)
 
-        # Patch the session-level query used by _find_by_ingest_key
         writer = IngestWriter(service)
         writer._find_by_ingest_key = MagicMock(return_value=find_result)
         return writer, service

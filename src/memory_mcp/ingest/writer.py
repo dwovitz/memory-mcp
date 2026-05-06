@@ -3,10 +3,6 @@
 from __future__ import annotations
 
 from typing import Any
-from uuid import UUID
-
-from sqlalchemy import select
-from sqlalchemy.orm import Session
 
 from memory_mcp.models import Memory
 from memory_mcp.services.memory_service import MemoryService
@@ -24,15 +20,7 @@ class IngestWriter:
 
     def _find_by_ingest_key(self, ingest_key: str) -> Memory | None:
         """Find the active memory with the given ingest_key in its metadata."""
-        session: Session = self._service.memories.session
-        # metadata_ is mapped to the "metadata" JSONB column.
-        # Use the ->> text operator to extract the ingest_key field as text.
-        stmt = (
-            select(Memory)
-            .where(Memory.status == "active")
-            .where(Memory.metadata_["ingest_key"].astext == ingest_key)
-        )
-        return session.scalars(stmt).first()
+        return self._service.memories.find_active_by_metadata_key("ingest_key", ingest_key)
 
     def upsert_memories(self, memories: list[dict[str, Any]]) -> dict[str, int]:
         """Upsert a list of memory dicts into the memory store.

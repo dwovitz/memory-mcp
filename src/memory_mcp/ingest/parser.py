@@ -16,7 +16,6 @@ def _stable_ingest_key(source_path: str, heading_path: str) -> str:
 
 def _make_memory(
     content: str,
-    title: str,
     applies_to: dict[str, Any],
     ingest_key: str,
     extra_metadata: dict[str, Any] | None = None,
@@ -26,7 +25,6 @@ def _make_memory(
         metadata.update(extra_metadata)
     return {
         "content": content,
-        "title": title,
         "memory_type": "project_fact",
         "applies_to": dict(applies_to),
         "metadata": metadata,
@@ -78,7 +76,7 @@ def extract_markdown_sections(
         heading_path = " > ".join(heading_stack)
 
         ingest_key = _stable_ingest_key(source_str, heading_path)
-        memories.append(_make_memory(content, title, scope, ingest_key))
+        memories.append(_make_memory(content, scope, ingest_key))
 
     return memories
 
@@ -147,7 +145,7 @@ def extract_mermaid_nodes(
         ingest_key = _stable_ingest_key(source_str, heading_path)
         title = f"Mermaid diagram {i + 1}"
         content = f"Mermaid diagram nodes:\n{labels_text}"
-        memories.append(_make_memory(content, title, scope, ingest_key))
+        memories.append(_make_memory(content, scope, ingest_key))
 
     return memories
 
@@ -176,25 +174,22 @@ def extract_apim_routes(
     except OSError:
         return []
 
-    try:
-        # Match resource blocks: resource "type" "name" { ... }
-        resource_re = re.compile(
-            r'^resource\s+"([^"]+)"\s+"([^"]+)"\s*\{([^{}]*(?:\{[^{}]*\}[^{}]*)*)\}',
-            re.MULTILINE | re.DOTALL,
-        )
-        memories: list[dict[str, Any]] = []
+    # Match resource blocks: resource "type" "name" { ... }
+    resource_re = re.compile(
+        r'^resource\s+"([^"]+)"\s+"([^"]+)"\s*\{([^{}]*(?:\{[^{}]*\}[^{}]*)*)\}',
+        re.MULTILINE | re.DOTALL,
+    )
+    memories: list[dict[str, Any]] = []
 
-        for match in resource_re.finditer(text):
-            res_type = match.group(1)
-            res_name = match.group(2)
-            body = match.group(3).strip()
+    for match in resource_re.finditer(text):
+        res_type = match.group(1)
+        res_name = match.group(2)
+        body = match.group(3).strip()
 
-            title = f"{res_type}.{res_name}"
-            content = f'resource "{res_type}" "{res_name}" {{\n{body}\n}}'
-            heading_path = title
-            ingest_key = _stable_ingest_key(source_str, heading_path)
-            memories.append(_make_memory(content, title, scope, ingest_key))
+        title = f"{res_type}.{res_name}"
+        content = f'resource "{res_type}" "{res_name}" {{\n{body}\n}}'
+        heading_path = title
+        ingest_key = _stable_ingest_key(source_str, heading_path)
+        memories.append(_make_memory(content, scope, ingest_key))
 
-        return memories
-    except Exception:  # noqa: BLE001
-        return []
+    return memories

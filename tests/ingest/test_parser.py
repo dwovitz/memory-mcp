@@ -46,7 +46,7 @@ def test_extract_markdown_two_headings(tmp_path: Path) -> None:
     assert len(memories) == 2
 
     first = memories[0]
-    assert first["title"] == "First Heading"
+    assert "title" not in first
     assert "First Heading" in first["content"]
     assert "Some body text." in first["content"]
     assert first["memory_type"] == "project_fact"
@@ -54,7 +54,7 @@ def test_extract_markdown_two_headings(tmp_path: Path) -> None:
     assert "ingest_key" in first["metadata"]
 
     second = memories[1]
-    assert second["title"] == "Second Heading"
+    assert "title" not in second
     assert "More content." in second["content"]
     assert second["memory_type"] == "project_fact"
     assert "ingest_key" in second["metadata"]
@@ -186,11 +186,12 @@ def test_extract_apim_routes_finds_resources(tmp_path: Path) -> None:
     memories = extract_apim_routes(tf_file, SCOPE)
 
     assert len(memories) == 2
-    titles = {m["title"] for m in memories}
-    assert "azurerm_api_management.main" in titles
-    assert "azurerm_api_management_api.demo" in titles
+    contents = "\n".join(m["content"] for m in memories)
+    assert "azurerm_api_management" in contents
+    assert "azurerm_api_management_api" in contents
 
     for mem in memories:
+        assert "title" not in mem
         assert mem["memory_type"] == "project_fact"
         assert mem["applies_to"] == SCOPE
         assert len(mem["metadata"]["ingest_key"]) == 16

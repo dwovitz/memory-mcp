@@ -168,6 +168,15 @@ class MemoryRepository:
 
         return statement
 
+    def find_active_by_metadata_key(self, field: str, value: str) -> Memory | None:
+        """Find the first active memory whose metadata JSONB contains the given field/value pair."""
+        stmt = (
+            select(Memory)
+            .where(Memory.status == "active")
+            .where(Memory.metadata_[field].astext == value)
+        )
+        return self.session.scalars(stmt).first()
+
     def _require(self, memory_id: UUID) -> Memory:
         memory = self.get(memory_id)
         if memory is None:
