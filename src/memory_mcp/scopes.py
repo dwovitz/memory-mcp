@@ -8,6 +8,7 @@ from typing import Any
 GLOBAL_MEMORY_SCOPE = "global"
 WORKSPACE_MEMORY_SCOPE = "workspace"
 PROJECT_MEMORY_SCOPE = "project"
+REPO_MEMORY_SCOPE = "repo"
 COMPONENT_MEMORY_SCOPE = "component"
 
 MEMORY_SCOPE_KEY = "memory_scope"
@@ -23,12 +24,59 @@ VALID_TO_KEY = "valid_to"
 OVERRIDES_MEMORY_IDS_KEY = "overrides_memory_ids"
 DEFAULT_DEVELOPMENT_SCOPE = "development"
 
+# Ordered hierarchy from broadest to narrowest scope.
+# repo sits between project and component.
+_HIERARCHY_KEYS: tuple[str, ...] = (
+    WORKSPACE_KEY,
+    PROJECT_KEY,
+    REPO_KEY,
+    COMPONENT_KEY,
+    TOPIC_KEY,
+)
+
+
+def hierarchy_layers(
+    applies_to: Mapping[str, Any],
+    *,
+    include_inherited: bool = True,
+) -> list[dict[str, Any]]:
+    """Return scope layers for ``applies_to``, narrowest first.
+
+    Each layer is a dict of the scope keys present up to that depth.
+    When ``repo`` is absent but ``project`` is present, the ``repo`` layer
+    implicitly inherits the ``project`` value so callers that predate the
+    ``repo`` field still match repo-scoped queries.
+
+    When ``include_inherited`` is False only the most specific (narrowest)
+    layer is returned.
+    """
+    resolved = dict(applies_to)
+
+    # Backward-compat: treat repo == project when repo absent.
+    if REPO_KEY not in resolved and PROJECT_KEY in resolved:
+        resolved[REPO_KEY] = resolved[PROJECT_KEY]
+
+    layers: list[dict[str, Any]] = []
+    accumulated: dict[str, Any] = {}
+    for key in _HIERARCHY_KEYS:
+        if key in resolved:
+            accumulated = {**accumulated, key: resolved[key]}
+            layers.append(dict(accumulated))
+
+    # Narrowest first.
+    layers.reverse()
+
+    if not include_inherited:
+        return layers[:1]
+    return layers
+
 
 def with_memory_scope(
     applies_to: Mapping[str, Any] | None,
     *,
     memory_scope: str,
     workspace: str | None = None,
+    repo: str | None = None,
     project: str | None = None,
     component: str | None = None,
     topic: str | None = None,
@@ -41,6 +89,8 @@ def with_memory_scope(
         scoped[WORKSPACE_KEY] = workspace
     if project is not None:
         scoped[PROJECT_KEY] = project
+    if repo is not None:
+        scoped[REPO_KEY] = repo
     if component is not None:
         scoped[COMPONENT_KEY] = component
     if topic is not None:
