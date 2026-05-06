@@ -6,9 +6,16 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from decimal import Decimal
+import math
+import logging
 import re
-from typing import Any
+from typing import Any, TYPE_CHECKING
+
+logger = logging.getLogger(__name__)
 from uuid import UUID
+
+if TYPE_CHECKING:
+    from memory_mcp.embeddings.service import EmbeddingService
 
 from sqlalchemy import Float, Select, case, cast, func, literal, literal_column, or_, select
 from sqlalchemy.dialects.postgresql import JSONB
@@ -22,6 +29,7 @@ from memory_mcp.scopes import (
     OVERRIDES_MEMORY_IDS_KEY,
     PROJECT_KEY,
     PROJECT_MEMORY_SCOPE,
+    REPO_KEY,
     SCOPE_PATH_KEY,
     VALID_FROM_KEY,
     VALID_TO_KEY,
@@ -76,11 +84,22 @@ PROJECT_CONTEXT_MEMORY_TYPES = (
 )
 
 
+def cosine_similarity(a: list[float], b: list[float]) -> float:
+    """Pure-Python cosine similarity between two vectors."""
+    dot = sum(x * y for x, y in zip(a, b))
+    norm_a = math.sqrt(sum(x * x for x in a))
+    norm_b = math.sqrt(sum(y * y for y in b))
+    if norm_a == 0 or norm_b == 0:
+        return 0.0
+    return dot / (norm_a * norm_b)
+
+
 class HybridRetrievalService:
     """Search and profile helpers built from structured filters and full text."""
 
-    def __init__(self, session: Session) -> None:
+    def __init__(self, session: Session, embedding_service: "EmbeddingService | None" = None) -> None:
         self.session = session
+        self.embedding_service = embedding_service
 
     def search_memories(
         self,
@@ -101,10 +120,12 @@ class HybridRetrievalService:
         offset: int = 0,
         query_embedding: Sequence[float] | None = None,
     ) -> list[MemorySearchResult]:
-        if query_embedding is not None:
-            raise NotImplementedError(
-                "Vector search is scaffolded only; embeddings are not generated or queried yet."
-            )
+        use_vector_rerank = (
+            self.embedding_service is not None
+            and text_query
+            and query_embedding is None
+        )
+        candidate_limit = max(limit * 5, 50) if use_vector_rerank else limit
 
         statement = self.build_search_memories_statement(
             text_query=text_query,
@@ -119,11 +140,11 @@ class HybridRetrievalService:
             scope_path=scope_path,
             min_confidence=min_confidence,
             since=since,
-            limit=limit,
-            offset=offset,
+            limit=candidate_limit,
+            offset=offset if not use_vector_rerank else 0,
         )
         rows = self.session.execute(statement).all()
-        return [
+        candidates = [
             MemorySearchResult(
                 memory=row[0],
                 rank_score=float(row.rank_score or 0),
@@ -132,6 +153,39 @@ class HybridRetrievalService:
             )
             for row in rows
         ]
+
+        if use_vector_rerank:
+            try:
+                q_emb: list[float] = self.embedding_service.provider.embed_texts([text_query])[0]
+                blended: list[tuple[float, MemorySearchResult]] = []
+                for result in candidates:
+                    mem_emb = result.memory.embedding
+                    if mem_emb is not None:
+                        csim = cosine_similarity(list(q_emb), list(mem_emb))
+                    else:
+                        csim = 0.0
+                    confidence = float(result.memory.confidence or 0.5)
+                    score = (
+                        0.35 * csim
+                        + 0.35 * result.text_rank
+                        + 0.2 * confidence
+                        + 0.1 * result.recency_score
+                    )
+                    blended.append((score, result))
+                blended.sort(key=lambda t: t[0], reverse=True)
+                return [
+                    MemorySearchResult(
+                        memory=r.memory,
+                        rank_score=s,
+                        text_rank=r.text_rank,
+                        recency_score=r.recency_score,
+                    )
+                    for s, r in blended[offset : offset + limit]
+                ]
+            except Exception:
+                logger.warning("Vector re-ranking failed, falling back to FTS order", exc_info=True)
+
+        return candidates[:limit]
 
     def build_search_memories_statement(
         self,
@@ -268,6 +322,7 @@ class HybridRetrievalService:
         self,
         *,
         workspace: str | None = None,
+        repo: str | None = None,
         project: str | None = None,
         component: str | None = None,
         topic: str | None = None,
@@ -310,6 +365,7 @@ class HybridRetrievalService:
         search_limit = limit + max(offset, 0)
         layers = _hierarchy_layers(
             workspace=workspace,
+            repo=repo,
             project=project,
             component=component,
             topic=topic,
@@ -323,6 +379,7 @@ class HybridRetrievalService:
                 applies_to=applies_to,
                 memory_scope=layer["memory_scope"],
                 workspace=layer.get("workspace"),
+                repo=layer.get("repo"),
                 project=layer.get("project"),
                 component=layer.get("component"),
                 topic=layer.get("topic"),
@@ -401,9 +458,11 @@ class HybridRetrievalService:
     def search_project_and_global_memories(
         self,
         project: str,
+        *,
+        repo: str | None = None,
         **kwargs: Any,
     ) -> list[MemorySearchResult]:
-        return self.search_hierarchical_memories(project=project, **kwargs)
+        return self.search_hierarchical_memories(project=project, repo=repo, **kwargs)
 
     def list_liked_items_by_genre(
         self,
@@ -640,6 +699,7 @@ def _merge_scoped_memory_results(
 def _hierarchy_layers(
     *,
     workspace: str | None,
+    repo: str | None,
     project: str | None,
     component: str | None,
     topic: str | None,
@@ -653,6 +713,8 @@ def _hierarchy_layers(
         }
         if project:
             layer["project"] = project
+        if repo:
+            layer["repo"] = repo
         if workspace:
             layer["workspace"] = workspace
         if topic:
@@ -663,6 +725,8 @@ def _hierarchy_layers(
             "memory_scope": COMPONENT_MEMORY_SCOPE,
             "project": project,
         }
+        if repo:
+            layer["repo"] = repo
         if workspace:
             layer["workspace"] = workspace
         layers.append(layer)
@@ -671,6 +735,8 @@ def _hierarchy_layers(
             "memory_scope": PROJECT_MEMORY_SCOPE,
             "project": project,
         }
+        if repo:
+            layer["repo"] = repo
         if workspace:
             layer["workspace"] = workspace
         layers.append(layer)
@@ -691,6 +757,7 @@ def _layer_applies_to(
     applies_to: dict[str, Any] | None,
     memory_scope: str,
     workspace: str | None = None,
+    repo: str | None = None,
     project: str | None = None,
     component: str | None = None,
     topic: str | None = None,
@@ -699,6 +766,7 @@ def _layer_applies_to(
         base = without_applies_to_keys(
             applies_to,
             WORKSPACE_KEY,
+            REPO_KEY,
             PROJECT_KEY,
             COMPONENT_KEY,
             TOPIC_KEY,
@@ -708,6 +776,7 @@ def _layer_applies_to(
         applies_to,
         memory_scope=memory_scope,
         workspace=workspace,
+        repo=repo,
         project=project,
         component=component,
         topic=topic,
