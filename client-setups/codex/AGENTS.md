@@ -10,6 +10,7 @@ Before substantial implementation, review, debugging, or planning, call
 ```text
 workspace="ai"
 project="<repo-name>"
+repo="<repo-name>"       # optional: narrows within a multi-repo project
 component="<subsystem when clear>"
 include_global=true
 include_sensitive=false

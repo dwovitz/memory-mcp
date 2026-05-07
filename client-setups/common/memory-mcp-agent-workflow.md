@@ -7,6 +7,8 @@ Before substantial implementation, review, debugging, or planning:
 - Call `get_context_packet` with the narrowest useful scope.
 - Use `workspace="ai"` or the local workspace root name.
 - Use `project="<repo-name>"` for the current repository.
+- Use `repo="<repo-name>"` when the memory server exposes the repo scope layer,
+  especially in workspaces where one project spans multiple repositories.
 - Add `component="<subsystem>"` only when the subsystem is clear.
 - Set `include_global=true` and `include_sensitive=false`.
 - Inspect `context_quality`, `suggested_next_action`, `source_read_policy`,

@@ -42,6 +42,7 @@ Before substantial implementation, review, debugging, or planning, call `get_con
 ```text
 workspace="ai"
 project="memory-mcp"
+repo="memory-mcp"       # optional: narrows to this repo within the project
 component="<subsystem when clear>"
 include_global=true
 include_sensitive=false
@@ -53,5 +54,7 @@ For source reads:
 - `answer_from_packet`: answer from memory and skip source reads.
 - `verify_narrowly`: read only the specific snippets needed to confirm the packet.
 - `mark_weak_context`: inspect source before answering, but keep reads bounded.
+
+When storing memories with `add_memory`, include `repo="memory-mcp"` in the scope for finer routing.
 
 After meaningful changes, refresh memory with compact, non-sensitive project facts, decisions, commands, constraints, and workflow updates. Never store secrets, credentials, raw logs, transcripts, or sensitive customer data.

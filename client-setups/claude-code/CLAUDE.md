@@ -11,6 +11,7 @@ get_context_packet(
   request="<what you're about to do>",
   workspace="ai",          # or your workspace root name
   project="<repo-name>",   # e.g. "memory-mcp", "ai-os-discord"
+  repo="<repo-name>",      # optional; narrows within a multi-repo project
   component="<subsystem>"  # optional — omit if not focused on one subsystem
 )
 ```
@@ -31,7 +32,7 @@ search_memory(query, memory_scope?, workspace?, project?, component?, topic?, me
 Searches memory records and returns compact matching entries.
 
 ```
-get_context_packet(request, workspace?, project?, component?, topic?, include_global?, include_sensitive?, max_memories?, max_tokens?, if_cache_version?)
+get_context_packet(request, workspace?, project?, repo?, component?, topic?, include_global?, include_sensitive?, max_memories?, max_tokens?, if_cache_version?)
 ```
 Builds a task-specific packet with preferences, facts, checkpoints, quality diagnostics, cache metadata, and source-read guidance.
 
@@ -43,7 +44,7 @@ Returns cache metadata for cache-aware retrieval.
 ### Writing
 
 ```
-add_memory(summary, content, memory_type?, memory_scope?, workspace?, project?, component?, topic?, applies_to?, tags?, confidence?, sensitivity?)
+add_memory(summary, content, memory_type?, memory_scope?, workspace?, project?, repo?, component?, topic?, applies_to?, tags?, confidence?, sensitivity?)
 ```
 Adds a memory when mutation tools are enabled.
 
@@ -89,7 +90,7 @@ run_pruning_pass(dry_run?, memory_scope?, workspace?, project?, older_than_days?
 
 ## Scopes
 
-Use `memory_scope="global"` for universal rules, `workspace` for decisions spanning multiple repos, `project` for repo facts, and `component` for subsystem facts. Always pass `workspace` and/or `project` when saving workspace or project scoped memories.
+Use `memory_scope="global"` for universal rules, `workspace` for decisions spanning multiple repos, `project` for product/program facts, `repo` for repository-local facts, and `component` for subsystem facts. Always pass `workspace`, `project`, and/or `repo` when saving scoped memories.
 
 ## Source-Read Discipline
 
