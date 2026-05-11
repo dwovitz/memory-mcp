@@ -22,7 +22,7 @@ Check docs/prompts/ROADMAP.md for current status before starting.
 | 1 | Auto-capture + distillation | [impl-auto-capture.md](impl-auto-capture.md) | `feat/auto-capture-distillation` | Sonnet | 1–2 days | ✅ |
 | 2 | Verify / complete semantic retrieval | [impl-semantic-retrieval.md](impl-semantic-retrieval.md) | `feat/p0-semantic-retrieval` | Sonnet | 2–4 hrs | ✅ |
 | 3 | QW1 markdown ingest script | [impl-qw1-markdown-ingest.md](impl-qw1-markdown-ingest.md) | `feat/qw1-markdown-ingest` | Sonnet | 2–4 hrs | ✅ |
-| 4 | P1 entity graph MCP tools | [impl-p1-entity-graph.md](impl-p1-entity-graph.md) | `feat/p1-entity-graph` | Sonnet | 4–8 hrs | ⬜ |
+| 4 | P1 entity graph MCP tools | [impl-p1-entity-graph.md](impl-p1-entity-graph.md) | `feat/p1-entity-graph` | Sonnet | 4–8 hrs | ✅ |
 | 5 | P1 code citations + QW3 cited_path | [impl-p1-code-citations.md](impl-p1-code-citations.md) | `feat/p1-code-citations` | Sonnet | 4–6 hrs | ⬜ |
 | 6 | P1 classifier upgrade | [impl-p1-classifier.md](impl-p1-classifier.md) | `feat/p1-classifier` | Sonnet | 4–6 hrs | ⬜ |
 | 7 | P2 event-flow memory types | [impl-p2-event-flow.md](impl-p2-event-flow.md) | `feat/p2-event-flow` | Sonnet | 3–5 hrs | ⬜ |
