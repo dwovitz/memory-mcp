@@ -34,6 +34,15 @@ Source-read discipline:
 - Mark `source_read_budget_obeyed: no` when any
   `source_read_contract.failure_conditions` entry applies.
 
+Entity graph tools:
+
+- `upsert_entity(entity_type, name, ...)` — idempotent create/update entity node by `(entity_type, name)`.
+- `link_entities(from_type, from_name, to_type, to_name, relationship_type, ...)` — idempotent directed edge.
+- `traverse_entity_graph(start_type, start_name, depth?, ...)` — BFS traversal returning nodes, edges, and memories.
+- `get_related_memories(entity_type, name, ...)` — memories linked to a specific entity.
+
+`search_memory` accepts a `cited_path` filter — narrows results to memories citing a specific source file. The two-pass entity-matching classifier improves deduplication and match confidence on retrieval.
+
 After meaningful project work:
 
 - Refresh durable project memory using mutation tools only when enabled for a

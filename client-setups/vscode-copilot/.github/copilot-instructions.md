@@ -25,6 +25,10 @@ Source-read rules:
 - Report `source_read_budget_obeyed: no` when a contract failure condition
   applies.
 
+Entity graph tools: `upsert_entity`, `link_entities`, `traverse_entity_graph`, `get_related_memories` — create/link/traverse entity nodes and retrieve their associated memories.
+
+`search_memory` accepts a `cited_path` filter — narrows results to memories citing a specific source file. Two-pass entity-matching classifier improves deduplication and match confidence.
+
 After meaningful project changes, refresh durable non-sensitive memory when
 mutation tools are enabled. Report `project_memory_refreshed: yes/no` when
 relevant.

@@ -46,12 +46,12 @@ def run(workspace: str, root: Path, globs: list[str], dry_run: bool = False) -> 
         print("\n[DRY RUN] No changes written.")
         return 0
 
-    from memory_mcp.db.session import get_session
+    from memory_mcp.db import session_scope
     from memory_mcp.ingest.writer import IngestWriter
     from memory_mcp.services.memory_service import MemoryService
 
     try:
-        with get_session() as session:
+        with session_scope() as session:
             service = MemoryService(session)
             writer = IngestWriter(service)
             result = writer.upsert_memories(all_memories)

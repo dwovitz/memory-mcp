@@ -71,6 +71,32 @@ When spawning Codex subagents, use the smallest model that preserves quality:
 - Always cap `gpt-5.4-mini` briefs: "report in under 150 words" or "return a structured list only".
 - If a listed model is unavailable, use the closest available smaller model for read-only work and the inherited model for implementation.
 
+## Entity Graph Tools
+
+```
+upsert_entity(entity_type, name, description?, properties?, workspace?, project?, repo?)
+```
+Idempotent create/update an entity node by `(entity_type, name)`.
+
+```
+link_entities(from_type, from_name, to_type, to_name, relationship_type, workspace?, project?, repo?)
+```
+Idempotent directed edge between two entities.
+
+```
+traverse_entity_graph(start_type, start_name, depth?, workspace?, project?, repo?)
+```
+BFS traversal — returns nodes, edges, and associated memories.
+
+```
+get_related_memories(entity_type, name, workspace?, project?, repo?, limit?)
+```
+Memories linked to a specific entity.
+
+## Code Citations
+
+`search_memory` accepts a `cited_path` filter — narrows results to memories that cite a specific source file path. The two-pass entity-matching classifier improves entity deduplication and match confidence on retrieval.
+
 ## Agent Dispatch Patterns
 
 Spawn a subagent when:
