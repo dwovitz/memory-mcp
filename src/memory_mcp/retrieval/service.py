@@ -632,6 +632,92 @@ class HybridRetrievalService:
             statement = statement.where(Memory.sensitivity.in_(list(sensitivities)))
         return statement
 
+    def traverse_entity_graph(
+        self,
+        start_entity_id: str,
+        relationship_types: tuple[str, ...] | None = None,
+        direction: str = "both",
+        max_depth: int = 2,
+        include_memories: bool = True,
+        limit: int = 20,
+    ) -> dict[str, Any]:
+        """BFS traversal of the entity graph from start_entity_id."""
+        from uuid import UUID
+
+        from memory_mcp.models import Memory
+        from memory_mcp.repositories.entities import EntityRepository
+        from memory_mcp.repositories.relationships import RelationshipRepository
+
+        entity_repo = EntityRepository(self.session)
+        rel_repo = RelationshipRepository(self.session)
+
+        try:
+            start_uuid = UUID(start_entity_id)
+        except ValueError:
+            return {"start_entity_id": start_entity_id, "node_count": 0, "edge_count": 0,
+                    "nodes": [], "edges": [], "memories": []}
+
+        visited_ids: set[str] = set()
+        nodes: list[dict[str, Any]] = []
+        edges: list[dict[str, Any]] = []
+        queue: list[tuple[str, int]] = [(start_entity_id, 0)]
+
+        while queue and len(nodes) < limit:
+            eid, depth = queue.pop(0)
+            if eid in visited_ids or depth > max_depth:
+                continue
+            visited_ids.add(eid)
+            entity = entity_repo.get(UUID(eid))
+            if entity is None:
+                continue
+            nodes.append({
+                "id": str(entity.id),
+                "entity_type": entity.entity_type,
+                "name": entity.name,
+                "aliases": entity.aliases or [],
+                "attributes": entity.attributes or {},
+            })
+            if depth < max_depth:
+                rels = rel_repo.neighbors(UUID(eid), relationship_types, direction)
+                for rel in rels:
+                    src_str = str(rel.source_entity_id)
+                    tgt_str = str(rel.target_entity_id)
+                    neighbor_id = tgt_str if src_str == eid else src_str
+                    edges.append({
+                        "source": src_str,
+                        "target": tgt_str,
+                        "type": rel.relationship_type,
+                        "description": rel.description,
+                    })
+                    if neighbor_id not in visited_ids:
+                        queue.append((neighbor_id, depth + 1))
+
+        memories: list[dict[str, Any]] = []
+        if include_memories:
+            from sqlalchemy import select as sa_select
+            for node in nodes[:10]:
+                ms = list(self.session.scalars(
+                    sa_select(Memory)
+                    .where(Memory.entity_id == UUID(node["id"]))
+                    .where(Memory.status == "active")
+                    .limit(3)
+                ))
+                for m in ms:
+                    memories.append({
+                        "entity_id": node["id"],
+                        "memory_id": str(m.id),
+                        "content": m.content,
+                    })
+
+        return {
+            "start_entity_id": start_entity_id,
+            "node_count": len(nodes),
+            "edge_count": len(edges),
+            "nodes": nodes,
+            "edges": edges,
+            "memories": memories,
+        }
+
 
 def _memory_search_vector() -> Any:
     return func.to_tsvector(

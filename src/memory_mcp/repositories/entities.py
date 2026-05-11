@@ -94,6 +94,38 @@ class EntityRepository:
 
         return statement
 
+    def upsert_entity(
+        self,
+        entity_type: str,
+        name: str,
+        aliases: list[Any] | None = None,
+        attributes: dict[str, Any] | None = None,
+        applies_to: dict[str, Any] | None = None,
+    ) -> tuple["Entity", str]:
+        """Return (entity, status) where status is 'created' or 'updated'."""
+        existing = self.session.query(Entity).filter(
+            Entity.entity_type == entity_type,
+            Entity.name == name,
+        ).first()
+        if existing:
+            if aliases is not None:
+                existing.aliases = aliases
+            if attributes is not None:
+                existing.attributes = attributes
+            if applies_to is not None:
+                existing.applies_to = applies_to
+            return existing, "updated"
+        entity = Entity(
+            entity_type=entity_type,
+            name=name,
+            aliases=aliases or [],
+            attributes=attributes or {},
+            applies_to=applies_to or {},
+        )
+        self.session.add(entity)
+        self.session.flush()
+        return entity, "created"
+
     def _require(self, entity_id: UUID) -> Entity:
         entity = self.get(entity_id)
         if entity is None:

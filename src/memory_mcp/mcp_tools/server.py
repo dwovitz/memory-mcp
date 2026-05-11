@@ -1029,6 +1029,155 @@ def search_entities(
         }
 
 
+@mcp.tool()
+def upsert_entity(
+    entity_type: str,
+    name: str,
+    aliases: list[str] | None = None,
+    attributes: dict[str, Any] | None = None,
+    workspace: str | None = None,
+    repo: str | None = None,
+    project: str | None = None,
+) -> dict[str, Any]:
+    """Create or update a named entity in the knowledge graph."""
+    _require_mutation_tools_enabled()
+    entity_type = _validate_text("entity_type", entity_type, max_chars=100, required=True)
+    name = _validate_text("name", name, max_chars=500, required=True)
+    workspace = _validate_text("workspace", workspace, max_chars=200)
+    repo = _validate_text("repo", repo, max_chars=200)
+    project = _validate_text("project", project, max_chars=200) or repo
+    _authorize_tool_call("upsert_entity", AuthAction.WRITE, workspace=workspace, project=project)
+    applies_to: dict[str, Any] = {}
+    if workspace:
+        applies_to["workspace"] = workspace
+    if project:
+        applies_to["project"] = project
+    with session_scope() as session:
+        from memory_mcp.repositories.entities import EntityRepository
+        repo_obj = EntityRepository(session)
+        entity, status = repo_obj.upsert_entity(
+            entity_type=entity_type,
+            name=name,
+            aliases=aliases,
+            attributes=attributes,
+            applies_to=applies_to or None,
+        )
+        return {
+            "status": status,
+            "entity": {
+                "id": str(entity.id),
+                "entity_type": entity.entity_type,
+                "name": entity.name,
+                "aliases": entity.aliases or [],
+                "attributes": entity.attributes or {},
+                "applies_to": entity.applies_to or {},
+            },
+        }
+
+
+@mcp.tool()
+def link_entities(
+    source_id: str,
+    target_id: str,
+    relationship_type: str,
+    description: str | None = None,
+    evidence: list[str] | None = None,
+    workspace: str | None = None,
+    project: str | None = None,
+) -> dict[str, Any]:
+    """Create or update a directed relationship between two entities."""
+    _require_mutation_tools_enabled()
+    source_id = _validate_text("source_id", source_id, max_chars=100, required=True)
+    target_id = _validate_text("target_id", target_id, max_chars=100, required=True)
+    relationship_type = _validate_text("relationship_type", relationship_type, max_chars=100, required=True)
+    workspace = _validate_text("workspace", workspace, max_chars=200)
+    project = _validate_text("project", project, max_chars=200)
+    _authorize_tool_call("link_entities", AuthAction.WRITE, workspace=workspace, project=project)
+    applies_to: dict[str, Any] = {}
+    if workspace:
+        applies_to["workspace"] = workspace
+    if project:
+        applies_to["project"] = project
+    with session_scope() as session:
+        from uuid import UUID
+
+        from memory_mcp.repositories.relationships import RelationshipRepository
+        rel_repo = RelationshipRepository(session)
+        rel, status = rel_repo.link_entities(
+            source_id=UUID(source_id),
+            target_id=UUID(target_id),
+            relationship_type=relationship_type,
+            description=description,
+            evidence=evidence,
+            applies_to=applies_to or None,
+        )
+        return {
+            "status": status,
+            "relationship": {
+                "source_id": str(rel.source_entity_id),
+                "target_id": str(rel.target_entity_id),
+                "type": rel.relationship_type,
+                "description": rel.description,
+            },
+        }
+
+
+@mcp.tool()
+def traverse_entity_graph(
+    start_entity_id: str,
+    relationship_types: list[str] | None = None,
+    direction: str = "both",
+    max_depth: int = 2,
+    include_memories: bool = True,
+    limit: int = 20,
+) -> dict[str, Any]:
+    """BFS traversal of the entity graph from a starting entity."""
+    start_entity_id = _validate_text("start_entity_id", start_entity_id, max_chars=100, required=True)
+    direction = direction if direction in ("outbound", "inbound", "both") else "both"
+    max_depth = _bounded_int("max_depth", max_depth, minimum=1, maximum=4)
+    limit = _bounded_int("limit", limit, minimum=1, maximum=100)
+    _authorize_tool_call("traverse_entity_graph", AuthAction.READ)
+    with session_scope() as session:
+        retrieval = HybridRetrievalService(session)
+        return retrieval.traverse_entity_graph(
+            start_entity_id=start_entity_id,
+            relationship_types=_tuple_or_none(relationship_types),
+            direction=direction,
+            max_depth=max_depth,
+            include_memories=include_memories,
+            limit=limit,
+        )
+
+
+@mcp.tool()
+def get_related_memories(
+    entity_id: str,
+    relationship_types: list[str] | None = None,
+    direction: str = "both",
+    limit: int = 20,
+) -> dict[str, Any]:
+    """Return memories attached to an entity and its direct neighbors."""
+    entity_id = _validate_text("entity_id", entity_id, max_chars=100, required=True)
+    direction = direction if direction in ("outbound", "inbound", "both") else "both"
+    limit = _bounded_int("limit", limit, minimum=1, maximum=MAX_SEARCH_LIMIT)
+    _authorize_tool_call("get_related_memories", AuthAction.READ)
+    with session_scope() as session:
+        retrieval = HybridRetrievalService(session)
+        result = retrieval.traverse_entity_graph(
+            start_entity_id=entity_id,
+            relationship_types=_tuple_or_none(relationship_types),
+            direction=direction,
+            max_depth=1,
+            include_memories=True,
+            limit=limit,
+        )
+        return {
+            "entity_id": entity_id,
+            "memories": result["memories"],
+            "neighbor_count": result["node_count"] - 1,
+        }
+
+
 def run() -> None:
     """Run the MCP server using the default stdio transport."""
 
