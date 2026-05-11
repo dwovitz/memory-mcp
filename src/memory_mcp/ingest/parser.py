@@ -4,8 +4,55 @@ from __future__ import annotations
 
 import hashlib
 import re
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
+
+
+@dataclass
+class MarkdownSection:
+    heading: str
+    level: int
+    body: str
+    source_path: str
+    heading_path: list[str] = field(default_factory=list)
+
+
+def parse_markdown_headings(path: Path) -> list[MarkdownSection]:
+    """Split a markdown file into one MarkdownSection per ATX heading."""
+    text = path.read_text(encoding="utf-8", errors="replace")
+    lines = text.splitlines(keepends=True)
+    sections: list[MarkdownSection] = []
+    heading_stack: list[tuple[int, str]] = []
+    current_body: list[str] = []
+    current_heading = ""
+    current_level = 0
+
+    def flush() -> None:
+        if current_heading:
+            breadcrumb = [h for _, h in heading_stack[:-1]]
+            sections.append(MarkdownSection(
+                heading=current_heading,
+                level=current_level,
+                body="".join(current_body).strip(),
+                source_path=str(path),
+                heading_path=breadcrumb,
+            ))
+
+    for line in lines:
+        m = re.match(r"^(#{1,6})\s+(.*)", line)
+        if m:
+            flush()
+            current_level = len(m.group(1))
+            current_heading = m.group(2).strip()
+            current_body = []
+            heading_stack = [(lvl, h) for lvl, h in heading_stack if lvl < current_level]
+            heading_stack.append((current_level, current_heading))
+        else:
+            current_body.append(line)
+
+    flush()
+    return sections
 
 
 def _stable_ingest_key(source_path: str, heading_path: str) -> str:
