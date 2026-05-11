@@ -12,6 +12,7 @@ from memory_mcp.models.schema import (
     Relationship,
     RetrievalProfile,
 )
+from memory_mcp.models.staging import StagingObservation  # noqa: F401
 
 __all__ = [
     "Base",
@@ -24,4 +25,5 @@ __all__ = [
     "PruningLog",
     "Relationship",
     "RetrievalProfile",
+    "StagingObservation",
 ]
