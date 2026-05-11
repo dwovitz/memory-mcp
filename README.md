@@ -17,6 +17,8 @@ see [CLIENT_SETUP_README.md](CLIENT_SETUP_README.md).
 - [Architecture](docs/ARCHITECTURE.md)
 - [Agent workflow](docs/AGENT_WORKFLOW.md)
 - [Benchmark cases](benchmarks/README.md)
+- **Auto-capture**: hook-driven session ingestion with background distillation —
+  see [docs/auto_capture.md](docs/auto_capture.md).
 
 The current implementation includes:
 

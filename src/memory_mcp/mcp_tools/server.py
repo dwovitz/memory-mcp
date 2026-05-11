@@ -29,6 +29,7 @@ from memory_mcp.auth.context import get_current_principal
 from memory_mcp.db import session_scope
 from memory_mcp.embeddings.config import get_embedding_service
 from memory_mcp.models import Entity, Memory, MemoryTag, Relationship
+from memory_mcp.repositories.staging import StagingRepository
 from memory_mcp.pruning import PruningService
 from memory_mcp.retrieval import EntitySearchResult, HybridRetrievalService, MemorySearchResult
 from memory_mcp.scopes import (
@@ -1190,6 +1191,54 @@ def get_related_memories(
             "entity_id": entity_id,
             "memories": result["memories"],
             "neighbor_count": result["node_count"] - 1,
+        }
+
+
+@mcp.tool()
+def enqueue_observation(
+    source: str,
+    payload: dict[str, Any],
+    workspace: str | None = None,
+    project: str | None = None,
+    repo: str | None = None,
+    component: str | None = None,
+) -> dict[str, str]:
+    """Enqueue a raw session observation for background distillation.
+
+    Called by Claude Code hooks. Returns immediately; the distiller worker
+    promotes raw observations into typed memories asynchronously.
+    """
+    scope = {k: v for k, v in {
+        "workspace": workspace,
+        "project": project,
+        "repo": repo,
+        "component": component,
+    }.items() if v is not None}
+    with session_scope() as s:
+        repo_ = StagingRepository(s)
+        obs_id = repo_.enqueue(source=source, payload=payload, scope=scope)
+        s.commit()
+    return {"observation_id": str(obs_id)}
+
+
+@mcp.tool()
+def get_memory_by_id(memory_id: str) -> dict[str, Any]:
+    """Fetch a single memory by UUID for citation/dereferencing.
+
+    Returns content, scope, type, confidence, and tags. Used by clients
+    that received a memory id in a context packet and want full detail.
+    """
+    with session_scope() as s:
+        m = s.get(Memory, UUID(memory_id))
+        if m is None or m.archived_at is not None:
+            return {"error": "not_found", "id": memory_id}
+        return {
+            "id": str(m.id),
+            "content": m.content,
+            "type": m.memory_type,
+            "scope": m.applies_to,
+            "confidence": float(m.confidence) if m.confidence is not None else None,
+            "tags": [t.tag for t in m.tags],
         }
 
 

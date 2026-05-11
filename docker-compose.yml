@@ -17,6 +17,20 @@ services:
     stdin_open: true
     tty: true
 
+  distiller:
+    build:
+      context: .
+    env_file:
+      - .env
+    environment:
+      POSTGRES_HOST: postgres
+      LOG_LEVEL: INFO
+    command: ["python", "-m", "memory_mcp.distiller.runner"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+
   postgres:
     image: pgvector/pgvector:pg16
     restart: unless-stopped
