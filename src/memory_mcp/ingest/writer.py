@@ -51,25 +51,30 @@ class IngestWriter:
         for mem in memories:
             ingest_key: str = mem["metadata"]["ingest_key"]
             existing = self._find_by_ingest_key(ingest_key)
+            code_citations = mem.get("code_citations")
 
             if existing is None:
-                self._service.create_memory(
+                created_mem = self._service.create_memory(
                     content=mem["content"],
                     memory_type=mem["memory_type"],
                     applies_to=mem.get("applies_to"),
                     metadata=mem.get("metadata"),
                 )
+                if code_citations is not None:
+                    created_mem.code_citations = code_citations
                 created += 1
             elif existing.content == mem["content"]:
                 skipped += 1
             else:
-                self._service.supersede_memory(
+                updated_mem = self._service.supersede_memory(
                     existing.id,
                     content=mem["content"],
                     memory_type=mem["memory_type"],
                     applies_to=mem.get("applies_to"),
                     metadata=mem.get("metadata"),
                 )
+                if code_citations is not None:
+                    updated_mem.code_citations = code_citations
                 updated += 1
 
         return {"created": created, "updated": updated, "skipped": skipped}

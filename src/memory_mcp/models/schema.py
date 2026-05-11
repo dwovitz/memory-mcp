@@ -198,6 +198,7 @@ class Memory(TimestampMixin, LifecycleMixin, Base):
         nullable=True,
     )
     superseded_at: Mapped[Any | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    code_citations: Mapped[JsonList | None] = mapped_column(JSONB, nullable=True)
 
 
 Index(

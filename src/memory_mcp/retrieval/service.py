@@ -119,6 +119,7 @@ class HybridRetrievalService:
         limit: int = 20,
         offset: int = 0,
         query_embedding: Sequence[float] | None = None,
+        cited_path: str | None = None,
     ) -> list[MemorySearchResult]:
         use_vector_rerank = (
             self.embedding_service is not None
@@ -142,6 +143,7 @@ class HybridRetrievalService:
             since=since,
             limit=candidate_limit,
             offset=offset if not use_vector_rerank else 0,
+            cited_path=cited_path,
         )
         rows = self.session.execute(statement).all()
         candidates = [
@@ -204,6 +206,7 @@ class HybridRetrievalService:
         since: datetime | None = None,
         limit: int = 20,
         offset: int = 0,
+        cited_path: str | None = None,
     ) -> Select[Any]:
         text_rank = _memory_text_rank(text_query)
         recency_score = _recency_score(Memory.created_at)
@@ -247,6 +250,11 @@ class HybridRetrievalService:
             statement = statement.where(Memory.confidence >= _decimal_value(min_confidence))
         if since is not None:
             statement = statement.where(Memory.created_at >= since)
+        if cited_path:
+            path_expr = f'$[*] ? (@.path starts with "{cited_path}")'
+            statement = statement.where(
+                func.jsonb_path_exists(Memory.code_citations, literal(path_expr))
+            )
 
         return (
             statement.order_by(rank_score.desc(), Memory.created_at.desc(), Memory.id)
@@ -342,6 +350,7 @@ class HybridRetrievalService:
         scope_path: Sequence[str] | None = None,
         include_inherited: bool = True,
         valid_at: datetime | None = None,
+        cited_path: str | None = None,
     ) -> list[MemorySearchResult]:
         if scope_path:
             return self.search_scope_path_memories(
@@ -397,6 +406,7 @@ class HybridRetrievalService:
                 since=since,
                 limit=max(search_limit, layer_caps[index]),
                 offset=0,
+                cited_path=cited_path,
             )
             layer_results.append((layer["memory_scope"], layer_caps[index], results))
 
@@ -422,6 +432,7 @@ class HybridRetrievalService:
         since: datetime | None = None,
         limit: int = 20,
         offset: int = 0,
+        cited_path: str | None = None,
     ) -> list[MemorySearchResult]:
         search_limit = limit + max(offset, 0)
         layers = scope_path_layers(scope_path, include_inherited=include_inherited)
@@ -444,6 +455,7 @@ class HybridRetrievalService:
                 since=since,
                 limit=max(search_limit * 2, layer_caps[index]),
                 offset=0,
+                cited_path=cited_path,
             )
             valid_results = [
                 result

@@ -120,6 +120,7 @@ def add_memory(
     tags: list[str] | None = None,
     include_content: bool = False,
     include_evidence: bool = False,
+    code_citations: list[dict] | None = None,
 ) -> dict[str, Any]:
     """Add a memory and optional tags.
 
@@ -131,6 +132,7 @@ def add_memory(
     _require_mutation_tools_enabled()
     content = _validate_text("content", content, max_chars=MAX_TEXT_CHARS, required=True)
     _check_content_for_secrets(content)
+    code_citations = _validate_code_citations(code_citations)
     summary = _validate_text("summary", summary, max_chars=MAX_SUMMARY_CHARS)
     evidence = _validate_json_payload("evidence", evidence, max_chars=MAX_JSON_CHARS)
     metadata = _validate_json_payload("metadata", metadata, max_chars=MAX_JSON_CHARS)
@@ -217,6 +219,8 @@ def add_memory(
             sensitivity=sensitivity,
             applies_to=applies_to,
         )
+        if code_citations is not None:
+            memory.code_citations = code_citations
         created_tags = [service.tag_memory(memory.id, tag) for tag in tags or []]
         _require_sensitive_echo_allowed(
             memory.sensitivity,
@@ -288,12 +292,14 @@ def supersede_memory(
     tags: list[str] | None = None,
     include_content: bool = False,
     include_evidence: bool = False,
+    code_citations: list[dict] | None = None,
 ) -> dict[str, Any]:
     """Supersede an existing memory with a replacement memory."""
 
     _require_mutation_tools_enabled()
     content = _validate_text("content", content, max_chars=MAX_TEXT_CHARS, required=True)
     _check_content_for_secrets(content)
+    code_citations = _validate_code_citations(code_citations)
     summary = _validate_text("summary", summary, max_chars=MAX_SUMMARY_CHARS)
     evidence = _validate_json_payload("evidence", evidence, max_chars=MAX_JSON_CHARS)
     metadata = _validate_json_payload("metadata", metadata, max_chars=MAX_JSON_CHARS)
@@ -381,6 +387,8 @@ def supersede_memory(
             sensitivity=sensitivity,
             applies_to=applies_to,
         )
+        if code_citations is not None:
+            memory.code_citations = code_citations
         created_tags = [service.tag_memory(memory.id, tag) for tag in tags or []]
         _require_sensitive_echo_allowed(
             memory.sensitivity,
@@ -439,6 +447,7 @@ def search_memory(
     include_sensitive: bool = False,
     include_global: bool = True,
     if_cache_version: str | None = None,
+    cited_path: str | None = None,
 ) -> dict[str, Any]:
     """Search memories with structured filters, tags, full text, confidence, and scope."""
 
@@ -455,6 +464,9 @@ def search_memory(
     limit = _bounded_int("limit", limit, minimum=1, maximum=MAX_SEARCH_LIMIT)
     min_confidence = None if min_confidence is None else _validate_confidence(min_confidence)
     if_cache_version = _validate_cache_version(if_cache_version)
+    cited_path = _validate_text("cited_path", cited_path, max_chars=500)
+    if cited_path and '"' in cited_path:
+        raise ValueError("cited_path must not contain double quotes")
     _authorize_tool_call(
         "search_memory",
         AuthAction.READ,
@@ -492,6 +504,7 @@ def search_memory(
                 min_confidence=min_confidence,
                 sensitivities=sensitivities,
                 limit=limit,
+                cited_path=cited_path,
             )
         elif workspace or project or component:
             results = retrieval.search_hierarchical_memories(
@@ -509,6 +522,7 @@ def search_memory(
                 sensitivities=sensitivities,
                 limit=limit,
                 include_global=include_global,
+                cited_path=cited_path,
             )
         else:
             results = retrieval.search_memories(
@@ -520,6 +534,7 @@ def search_memory(
                 min_confidence=min_confidence,
                 sensitivities=sensitivities,
                 limit=limit,
+                cited_path=cited_path,
             )
         return {
             "query": query,
@@ -1344,6 +1359,37 @@ def _check_content_for_secrets(content: str) -> None:
                 "content appears to contain a secret or credential. "
                 "Secrets must not be stored as memories."
             )
+
+
+_MAX_CITATIONS = 20
+_VALID_CITATION_KINDS = frozenset({"file", "symbol", "event", "endpoint"})
+
+
+def _validate_code_citations(citations: Any) -> list[dict] | None:
+    if citations is None:
+        return None
+    if not isinstance(citations, list):
+        raise ValueError("code_citations must be a list")
+    if len(citations) > _MAX_CITATIONS:
+        raise ValueError(f"code_citations must not exceed {_MAX_CITATIONS} items")
+    result = []
+    for c in citations:
+        if not isinstance(c, dict):
+            raise ValueError("each code_citation must be a dict")
+        path = c.get("path", "")
+        if not path:
+            raise ValueError("code_citation must have a path")
+        if path.startswith("/") or (len(path) > 1 and path[1] == ":"):
+            raise ValueError(
+                f"code_citation path must be relative, got: {path!r} (absolute paths disallowed)"
+            )
+        if len(path) > 500:
+            raise ValueError("code_citation path too long (max 500 chars)")
+        kind = c.get("kind", "file")
+        if kind not in _VALID_CITATION_KINDS:
+            raise ValueError(f"code_citation kind must be one of {sorted(_VALID_CITATION_KINDS)}")
+        result.append({k: v for k, v in c.items()})
+    return result
 
 
 def _allowed_sensitivities(include_sensitive: bool) -> tuple[str, ...]:
