@@ -139,6 +139,10 @@ erDiagram
 | `summarize_domain_profile` | Summarize a domain as a bounded context packet. |
 | `run_pruning_pass` | Archive, supersede, compress, and decay memory according to pruning rules. |
 | `search_entities` | Search named entities by text query, type, workspace, or repo. |
+| `upsert_entity` | Create or update a named entity in the knowledge graph. |
+| `link_entities` | Create or update a directed relationship between two entities. |
+| `traverse_entity_graph` | BFS walk from a starting entity, returns nodes, edges, attached memories. |
+| `get_related_memories` | Return memories attached to an entity and its direct neighbors. |
 | `get_memory_cache_state` | Return a version token for cache validation. |
 
 ## Retrieval Flow

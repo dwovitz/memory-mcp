@@ -134,6 +134,61 @@ class RelationshipRepository:
 
         return statement
 
+    def link_entities(
+        self,
+        source_id: UUID,
+        target_id: UUID,
+        relationship_type: str,
+        description: str | None = None,
+        evidence: list[Any] | None = None,
+        applies_to: dict[str, Any] | None = None,
+    ) -> tuple["Relationship", str]:
+        """Return (relationship, status) where status is 'created' or 'updated'."""
+        existing = self.session.query(Relationship).filter(
+            Relationship.source_entity_id == source_id,
+            Relationship.target_entity_id == target_id,
+            Relationship.relationship_type == relationship_type,
+        ).first()
+        if existing:
+            if description is not None:
+                existing.description = description
+            return existing, "updated"
+        rel = Relationship(
+            source_entity_id=source_id,
+            target_entity_id=target_id,
+            relationship_type=relationship_type,
+            description=description,
+            evidence=evidence or [],
+            applies_to=applies_to or {},
+        )
+        self.session.add(rel)
+        self.session.flush()
+        return rel, "created"
+
+    def neighbors(
+        self,
+        entity_id: UUID,
+        relationship_types: tuple[str, ...] | None = None,
+        direction: str = "both",
+    ) -> list["Relationship"]:
+        """Return relationships where entity_id is source, target, or either."""
+        q = self.session.query(Relationship).filter(Relationship.status == "active")
+        if direction == "outbound":
+            q = q.filter(Relationship.source_entity_id == entity_id)
+        elif direction == "inbound":
+            q = q.filter(Relationship.target_entity_id == entity_id)
+        else:
+            from sqlalchemy import or_
+            q = q.filter(
+                or_(
+                    Relationship.source_entity_id == entity_id,
+                    Relationship.target_entity_id == entity_id,
+                )
+            )
+        if relationship_types:
+            q = q.filter(Relationship.relationship_type.in_(relationship_types))
+        return q.all()
+
     def _require(self, relationship_id: UUID) -> Relationship:
         relationship = self.get(relationship_id)
         if relationship is None:
