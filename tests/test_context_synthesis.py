@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from uuid import uuid4
 
+import pytest
+
 from memory_mcp.models import Memory
 from memory_mcp.retrieval import MemorySearchResult, PROJECT_CONTEXT_MEMORY_TYPES
 from memory_mcp.services import ContextSynthesisService
@@ -579,6 +581,11 @@ def test_scope_path_synthesis_uses_scoped_search() -> None:
     assert call["include_inherited"] is True
 
 
+@pytest.fixture
+def synthesis_service():
+    return ContextSynthesisService(retriever=FakeRetriever([]))
+
+
 def test_synthesis_respects_max_token_budget() -> None:
     retriever = FakeRetriever(
         [
@@ -599,3 +606,19 @@ def test_synthesis_respects_max_token_budget() -> None:
     assert packet.facts == ["Short fact."]
     assert packet.after_token_estimate <= 4
     assert packet.token_budget == 4
+
+
+def test_classification_exposes_matched_entities(synthesis_service) -> None:
+    classification = synthesis_service.classify_request(
+        "Why is UCX.RequestRouting not routing cases correctly?"
+    )
+    assert hasattr(classification, "matched_entities")
+    assert hasattr(classification, "hinted_repos")
+    assert hasattr(classification, "hinted_memory_types")
+
+
+def test_classification_matched_entities_is_list(synthesis_service) -> None:
+    classification = synthesis_service.classify_request("general question")
+    assert isinstance(classification.matched_entities, list)
+    assert isinstance(classification.hinted_repos, list)
+    assert isinstance(classification.hinted_memory_types, list)
