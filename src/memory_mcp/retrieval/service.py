@@ -120,6 +120,7 @@ class HybridRetrievalService:
         offset: int = 0,
         query_embedding: Sequence[float] | None = None,
         cited_path: str | None = None,
+        entity_id_hints: list[str] | None = None,
     ) -> list[MemorySearchResult]:
         use_vector_rerank = (
             self.embedding_service is not None
@@ -175,7 +176,7 @@ class HybridRetrievalService:
                     )
                     blended.append((score, result))
                 blended.sort(key=lambda t: t[0], reverse=True)
-                return [
+                results = [
                     MemorySearchResult(
                         memory=r.memory,
                         rank_score=s,
@@ -184,10 +185,11 @@ class HybridRetrievalService:
                     )
                     for s, r in blended[offset : offset + limit]
                 ]
+                return _apply_entity_id_hints(results, entity_id_hints)
             except Exception:
                 logger.warning("Vector re-ranking failed, falling back to FTS order", exc_info=True)
 
-        return candidates[:limit]
+        return _apply_entity_id_hints(candidates[:limit], entity_id_hints)
 
     def build_search_memories_statement(
         self,
@@ -729,6 +731,26 @@ class HybridRetrievalService:
             "edges": edges,
             "memories": memories,
         }
+
+
+def _apply_entity_id_hints(
+    results: list[MemorySearchResult],
+    entity_id_hints: list[str] | None,
+) -> list[MemorySearchResult]:
+    if not entity_id_hints:
+        return results
+    hint_set = set(entity_id_hints)
+    return [
+        MemorySearchResult(
+            memory=r.memory,
+            rank_score=(r.rank_score or 0.0) + 0.1,
+            text_rank=r.text_rank,
+            recency_score=r.recency_score,
+        )
+        if str(r.memory.entity_id) in hint_set
+        else r
+        for r in results
+    ]
 
 
 def _memory_search_vector() -> Any:

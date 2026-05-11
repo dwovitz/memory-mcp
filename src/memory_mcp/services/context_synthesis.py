@@ -204,6 +204,9 @@ class RequestClassification:
     tags: tuple[str, ...] | None = None
     include_detail: bool = False
     rationale: str = ""
+    matched_entities: list[dict] = field(default_factory=list)
+    hinted_memory_types: list[str] = field(default_factory=list)
+    hinted_repos: list[str] = field(default_factory=list)
 
 
 @dataclass(frozen=True)
@@ -361,6 +364,20 @@ class ContextSynthesisService:
                 include_detail=classification.include_detail,
                 rationale="Explicit project scope indicates project context retrieval.",
             )
+        matched_entities = self._match_entities_in_request(request)
+        hinted_repos = [e["name"] for e in matched_entities if e["entity_type"] in ("service", "repo")]
+        classification = RequestClassification(
+            domain=classification.domain,
+            memory_types=classification.memory_types,
+            scope=classification.scope,
+            tags=classification.tags,
+            include_detail=classification.include_detail,
+            rationale=classification.rationale,
+            matched_entities=matched_entities,
+            hinted_memory_types=list(classification.memory_types),
+            hinted_repos=hinted_repos,
+        )
+        entity_id_hints = [e["id"] for e in matched_entities]
         search_kwargs = {
             "text_query": request,
             "memory_types": classification.memory_types,
@@ -381,6 +398,7 @@ class ContextSynthesisService:
             include_global=include_global,
             scope_path=scope_path,
             include_inherited=include_inherited,
+            entity_id_hints=entity_id_hints if entity_id_hints else None,
             **search_kwargs,
         )
         fallback_attempts: list[dict[str, Any]] = []
@@ -400,6 +418,7 @@ class ContextSynthesisService:
                 include_global=include_global,
                 scope_path=scope_path,
                 include_inherited=include_inherited,
+                entity_id_hints=entity_id_hints if entity_id_hints else None,
                 **search_kwargs,
             )
             primary_first = fallback_reason == "broad_project_request" and _has_project_scoped_memory(
@@ -477,6 +496,21 @@ class ContextSynthesisService:
             diagnostics=diagnostics,
         )
 
+    def _match_entities_in_request(self, request: str) -> list[dict]:
+        """Run search_entities via the retriever, return top hits above threshold."""
+        try:
+            search_entities = getattr(self.retriever, "search_entities", None)
+            if not callable(search_entities):
+                return []
+            results = search_entities(text_query=request, limit=5)
+            return [
+                {"id": str(r.entity.id), "name": r.entity.name, "entity_type": r.entity.entity_type}
+                for r in results
+                if r.rank_score is None or r.rank_score > 0.3
+            ]
+        except Exception:
+            return []
+
     def _search_relevant_memories(
         self,
         *,
@@ -488,6 +522,7 @@ class ContextSynthesisService:
         include_global: bool,
         scope_path: Sequence[str] | None,
         include_inherited: bool,
+        entity_id_hints: list[str] | None = None,
         **search_kwargs: Any,
     ) -> list[MemorySearchResult]:
         if scope_path:
@@ -505,10 +540,10 @@ class ContextSynthesisService:
                     SCOPE_PATH_KEY: list(scope_path),
                 },
             }
-            return self.retriever.search_memories(**search_kwargs)
+            return self.retriever.search_memories(entity_id_hints=entity_id_hints, **search_kwargs)
 
         if not workspace and not project and not component:
-            return self.retriever.search_memories(**search_kwargs)
+            return self.retriever.search_memories(entity_id_hints=entity_id_hints, **search_kwargs)
 
         hierarchical_search = getattr(self.retriever, "search_hierarchical_memories", None)
         if callable(hierarchical_search):
@@ -578,6 +613,7 @@ class ContextSynthesisService:
         seen: set[Any] = set()
         for scoped_applies_to in layers:
             scoped_results = self.retriever.search_memories(
+                entity_id_hints=entity_id_hints,
                 **{
                     **search_kwargs,
                     "applies_to": scoped_applies_to,

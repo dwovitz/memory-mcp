@@ -24,7 +24,7 @@ Check docs/prompts/ROADMAP.md for current status before starting.
 | 3 | QW1 markdown ingest script | [impl-qw1-markdown-ingest.md](impl-qw1-markdown-ingest.md) | `feat/qw1-markdown-ingest` | Sonnet | 2–4 hrs | ✅ |
 | 4 | P1 entity graph MCP tools | [impl-p1-entity-graph.md](impl-p1-entity-graph.md) | `feat/p1-entity-graph` | Sonnet | 4–8 hrs | ✅ |
 | 5 | P1 code citations + QW3 cited_path | [impl-p1-code-citations.md](impl-p1-code-citations.md) | `feat/p1-code-citations` | Sonnet | 4–6 hrs | ✅ |
-| 6 | P1 classifier upgrade | [impl-p1-classifier.md](impl-p1-classifier.md) | `feat/p1-classifier` | Sonnet | 4–6 hrs | ⬜ |
+| 6 | P1 classifier upgrade | [impl-p1-classifier.md](impl-p1-classifier.md) | `feat/p1-classifier` | Sonnet | 4–6 hrs | ✅ |
 | 7 | P2 event-flow memory types | [impl-p2-event-flow.md](impl-p2-event-flow.md) | `feat/p2-event-flow` | Sonnet | 3–5 hrs | ⬜ |
 | 8 | P2 context packet diagnostics | [impl-p2-packet-diagnostics.md](impl-p2-packet-diagnostics.md) | `feat/p2-packet-diagnostics` | Sonnet | 3–4 hrs | ⬜ |
 | 9 | P2 code graph import tool | [impl-p2-code-graph-import.md](impl-p2-code-graph-import.md) | `feat/p2-code-graph-import` | Sonnet | 3–4 hrs | ⬜ |
