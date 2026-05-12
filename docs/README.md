@@ -11,6 +11,8 @@ large files.
   roadmap.
 - [Architecture](ARCHITECTURE.md) explains the system shape, storage model,
   retrieval flow, lifecycle rules, and Mermaid diagrams.
+- [Backlog](BACKLOG.md) indexes the current GitHub-backed memory safety and
+  compiled-view backlog direction.
 - [Agent Workflow](AGENT_WORKFLOW.md) explains how agents should retrieve,
   apply, and refresh context during real coding work.
 - [Benchmarks](../benchmarks/README.md) define task-oriented benchmark cases
@@ -39,6 +41,7 @@ The system is optimized for:
 flowchart LR
     Goals["Goals"] --> Architecture["Architecture"]
     Goals --> Workflow["Agent Workflow"]
+    Architecture --> Backlog["Backlog"]
     Architecture --> Readme["Root README"]
     Workflow --> ClientSetup["Client Setup"]
     ClientSetup --> Agents["MCP-capable agents"]
