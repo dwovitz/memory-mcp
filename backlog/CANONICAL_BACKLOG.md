@@ -19,6 +19,7 @@ The repo-local backlog is the implementation source of truth for memory-MCP work
 | ID | Title | Priority | Status | Notes |
 |---|---|---:|---|---|
 | MMCP-001 | Implement scheduled Memory Dream consolidation worker | P0 | Backlog | Add an explicit consolidation pass inspired by Claude Code Auto Dream: review recent memory, merge duplicate or overlapping facts, resolve conflicts, prune stale/low-value entries, promote durable scoped memories, archive superseded detail, and write provenance/audit records. Must fit server-scalable PostgreSQL/pgvector architecture rather than local-only file cleanup. |
+| MMCP-002 | Build CLI for memory-MCP | P1 | Backlog | Add a first-class CLI for creating, searching, inspecting, pruning, exporting, and administering memory through the shared authenticated memory-MCP service rather than through chat adapters only. Must support scoped memory operations, script-friendly output, and server-scalable architecture assumptions. |
 
 ## Story detail
 
@@ -71,6 +72,38 @@ Pruned, deduped, indexed long-term memory
 - LLM-only conflict resolution without deterministic guardrails.
 - Cross-user consolidation without explicit tenant/auth boundaries.
 - Replacing the existing `run_pruning_pass` behavior wholesale.
+
+### MMCP-002 — Build CLI for memory-MCP
+
+**Behavior:** add a first-class CLI for interacting with memory-MCP outside MCP chat adapters.
+
+**Intent:** allow humans, scripts, automations, and future ai-os components to create, retrieve, inspect, administer, and manage memory directly from the terminal while preserving the shared-service/server-scalable architecture.
+
+**Functional requirements:**
+
+- Add a CLI entry point for memory-MCP.
+- Support memory create/search/list/detail/update/archive flows.
+- Support scoped operations including global, workspace, project, component, topic, and `scope_path`.
+- Support script-friendly output formats such as JSON.
+- Support auth profiles, server URL configuration, and default scope/workspace/project settings.
+- Avoid duplicating business logic already implemented in services or MCP boundaries.
+- Support safe destructive operations through confirmations or explicit force flags.
+- Document local Docker usage and future hosted/server usage.
+
+**Acceptance criteria:**
+
+- CLI works independently of Claude, Codex, Discord, or other chat adapters.
+- CLI uses the same shared memory service and persistence path as MCP operations.
+- Output is usable by both humans and scripts.
+- Auth/configuration behavior is documented.
+- Core commands are covered by automated tests.
+- At least one end-to-end CLI happy path exists against a test or mocked service.
+
+**Out of scope for first slice:**
+
+- Full TUI/interactive dashboard workflows.
+- Embedded local-only memory engines separate from the shared service.
+- Rich web administration UI.
 
 ## Backlog maintenance rules
 
