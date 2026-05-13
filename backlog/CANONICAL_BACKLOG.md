@@ -22,8 +22,8 @@ The repo-local backlog is the implementation source of truth for memory-MCP work
 | MMCP-001 | Implement scheduled Memory Dream consolidation worker | P0 | Backlog | Add an explicit consolidation pass inspired by Claude Code Auto Dream: review recent memory, merge duplicate or overlapping facts, resolve conflicts, prune stale/low-value entries, promote durable scoped memories, archive superseded detail, and write provenance/audit records. Must fit server-scalable PostgreSQL/pgvector architecture rather than local-only file cleanup. |
 | MMCP-002 | Build CLI for memory-MCP | P1 | Backlog | Add a first-class CLI for creating, searching, inspecting, pruning, exporting, and administering memory through the shared authenticated memory-MCP service rather than through chat adapters only. Must support scoped memory operations, script-friendly output, and server-scalable architecture assumptions. |
 | MMCP-003 | Track 1: Auto-capture + distillation | P0 | Ready | Migrated from GitHub issue #3. Implement hook-driven auto-capture of Claude Code session events into a Postgres-backed staging queue, background distillation into typed scoped memories, and automatic compressed context on `UserPromptSubmit`. |
-| MMCP-004 | Define SafeMemoryContract for trusted durable memory | P0 | Backlog | Migrated from GitHub issue #4. Define durable memory trust classes, provenance requirements, executable-instruction rules, sensitivity defaults, confidence requirements, lifecycle behavior, and retrieval/rendering defaults. |
-| MMCP-005 | Add durable compiled memory views with source provenance | P1 | Backlog | Migrated from GitHub issue #5. Define derived wiki-style memory projections such as project summaries, user preference summaries, active decision summaries, stale/conflict reports, and memory health reports without replacing structured memory as source of truth. |
+| MMCP-004 | Define SafeMemoryContract for trusted durable memory | P0 | Backlog | Migrated from GitHub issue #4. Define durable memory trust classes, provenance requirements, executable-instruction rules, judge/policy outcome records, authorization evidence records, sensitivity defaults, confidence requirements, lifecycle behavior, and retrieval/rendering defaults. |
+| MMCP-005 | Add durable compiled memory views with source provenance | P1 | Backlog | Migrated from GitHub issue #5. Define derived wiki-style memory projections such as project summaries, user preference summaries, active decision summaries, authorization/evidence summaries, stale/conflict reports, and memory health reports without replacing structured memory as source of truth. |
 
 ## Decisions
 
@@ -210,6 +210,10 @@ Define memory classes such as:
 - inferred memory
 - executable instruction / workflow rule
 - policy or safety rule
+- authorization evidence
+- judge decision
+- policy outcome
+- structured write-back record
 
 For each class, define:
 
@@ -221,6 +225,7 @@ For each class, define:
 - confidence requirements
 - lifecycle rules
 - retrieval/rendering defaults
+- operational meaning fields such as action relevance, consequence class, advisory-only status, and whether the memory may inform future side-effect proposals
 
 **Acceptance criteria:**
 
@@ -228,8 +233,10 @@ For each class, define:
 - Define supported memory classes and trust levels.
 - Define how evidence/provenance, sensitivity, scope, lifecycle, confidence, and source actor interact.
 - Define explicit rules for when memory may become executable instruction.
+- Define how judge decisions, policy outcomes, authorization evidence, and structured write-back records are stored without becoming arbitrary executable instructions.
 - Define default behavior for agent-generated summaries and inferred memories as lower-trust derived artifacts.
 - Define validation requirements for future `add_memory` / `supersede_memory` write paths.
+- Define operational meaning fields that let retrieval distinguish advisory memory from memory that may safely inform future governed side-effect proposals.
 - Cross-link from `docs/ARCHITECTURE.md`, `docs/GOALS.md`, and `docs/README.md`.
 
 **Non-goals:**
@@ -252,6 +259,7 @@ For each class, define:
 - user preference summary
 - active decisions summary
 - current workflow/rules summary
+- authorization/evidence summary
 - stale/conflict report
 - memory health report
 
@@ -260,9 +268,11 @@ For each class, define:
 - Add or update design documentation for durable compiled memory views.
 - Define compiled views as derived artifacts, not canonical truth.
 - Define source-memory provenance links for each compiled view.
+- Preserve authorization/evidence chains in compiled views instead of flattening them into unsourced summary prose.
 - Define stale/invalidated state when source memories are archived, superseded, deleted, or changed.
 - Define how compiled views relate to existing `context_packets`.
 - Define retrieval behavior: when agents may use a compiled view directly and when they must verify against source memory.
+- Define when compiled views may be used as orientation only versus when source records must be checked before sensitive or side-effecting conclusions.
 - Identify whether existing schema can support this or whether a small schema migration is needed.
 - Add follow-up implementation slices only after the design is accepted.
 
