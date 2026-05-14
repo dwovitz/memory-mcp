@@ -1112,84 +1112,11 @@ def _source_guidance_lines(diagnostics: dict[str, Any]) -> list[str]:
     source_read_policy = diagnostics.get("source_read_policy")
     if not suggested_next_action or not source_read_policy:
         return []
-    lines = [
+    return [
         f"Suggested next action: {suggested_next_action}.",
         f"Source read policy: {source_read_policy}.",
         f"Recommended post-packet source budget: {diagnostics.get('source_read_budget_tokens', 0)} tokens.",
     ]
-    limits = diagnostics.get("source_read_limits") or {}
-    if limits:
-        lines.append(
-            "Source read limits: "
-            f"max files before edit {limits.get('max_files_before_edit', 0)}, "
-            f"max snippets {limits.get('max_snippets', 0)}, "
-            f"max lines per snippet {limits.get('max_lines_per_snippet', 0)}, "
-            f"path enumeration allowed {str(limits.get('path_enum_allowed', False)).lower()}, "
-            f"broad reads disallowed {str(limits.get('broad_read_disallowed', True)).lower()}."
-        )
-        if source_read_policy == "implementation_required":
-            lines.append(
-                "Implementation workflow: enumerate likely paths, run path-only search first, choose "
-                "the top candidate files, read only bounded snippets from those candidates, stop at "
-                "the budget checkpoint before reading more, then make the first edit or explicitly "
-                "record a budget exception."
-            )
-            lines.append(
-                "Before the first edit, extra pre-edit reads require a recorded budget exception: "
-                "name the missing fact and likely file or symbol before expanding. Unless the "
-                "benchmark explicitly allows it, those extra reads count as a budget failure."
-            )
-            lines.append(PRE_EDIT_DEFAULT_ACTION_RULE)
-            lines.append(
-                "Do not read tests, model, route, presenter, policy, migration, and client files all "
-                "up front. Pick the most likely entry point and one or two directly adjacent boundaries "
-                "first; expand only after the first edit or after recording the exception."
-            )
-            lines.append(
-                "Snippet size limits are hard pre-edit limits. Do not read oversized chunks and later "
-                "describe them as bounded."
-            )
-        if limits.get("path_only_discovery_only"):
-            lines.append(
-                "Path-only commands are discovery-only. They identify candidate files, not source "
-                "context to consume."
-            )
-        if limits.get("select_string_list_only_for_discovery"):
-            lines.append(
-                "Select-String -List is allowed only when listing matching files for discovery; "
-                "Select-String output with matching source lines is a source snippet read."
-            )
-        guidance = limits.get("degraded_search_guidance")
-        if guidance:
-            lines.append(str(guidance))
-        if limits.get("bounded_snippets_after_discovery"):
-            lines.append(BOUNDED_SNIPPET_GUIDANCE)
-        if limits.get("bounded_snippets_still_count_toward_budget"):
-            lines.append(BOUNDED_SNIPPET_COUNT_GUIDANCE)
-        if limits.get("oversized_snippet_counts_as_budget_failure"):
-            lines.append(BOUNDED_SNIPPET_EXCEPTION_GUIDANCE)
-        examples = limits.get("fallback_search_examples") or []
-        if examples:
-            lines.append("Fallback search examples: " + "; ".join(str(item) for item in examples) + ".")
-        disallowed_examples = limits.get("fallback_search_disallowed_examples") or []
-        if disallowed_examples:
-            lines.append(
-                "Disallowed fallback examples: "
-                + "; ".join(str(item) for item in disallowed_examples)
-                + "."
-            )
-        if limits.get("stop_on_source_output_fallback"):
-            lines.append(
-                "If fallback search starts printing source lines, stop immediately, discard that output, "
-                "rerun path-only search, and count it as a budget failure when benchmarks ask."
-            )
-        exception = limits.get("over_budget_exception")
-        if exception:
-            lines.append(str(exception))
-    focus = diagnostics.get("verification_focus") or []
-    if focus and source_read_policy in {"focused_snippets", "implementation_required"}:
-        lines.append("Verification focus: " + "; ".join(str(item) for item in focus) + ".")
-    return lines
 
 
 def _merge_scoped_results(

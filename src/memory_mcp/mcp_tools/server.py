@@ -1242,10 +1242,12 @@ def get_memory_by_id(memory_id: str) -> dict[str, Any]:
         }
 
 
-def run() -> None:
-    """Run the MCP server using the default stdio transport."""
-
-    mcp.run()
+def run(transport: str = "stdio", host: str = "0.0.0.0", port: int = 3000) -> None:
+    """Run the MCP server."""
+    if transport == "stdio":
+        mcp.run()
+    else:
+        mcp.run(transport=transport, host=host, port=port)
 
 
 def _cache_state_from_session(session: Any) -> dict[str, Any]:
@@ -1352,9 +1354,6 @@ def _context_packet_to_dict(packet: ContextPacket) -> dict[str, Any]:
         "suggested_next_action": packet.diagnostics.get("suggested_next_action"),
         "source_read_policy": packet.diagnostics.get("source_read_policy"),
         "source_read_budget_tokens": packet.diagnostics.get("source_read_budget_tokens"),
-        "source_read_limits": packet.diagnostics.get("source_read_limits"),
-        "source_read_contract": packet.diagnostics.get("source_read_contract"),
-        "diagnostics": packet.diagnostics,
         "classification": {
             "domain": packet.classification.domain,
             "memory_types": list(packet.classification.memory_types),

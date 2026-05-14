@@ -19,26 +19,23 @@ max_tokens=1200
 ```
 
 Inspect `context_quality`, `warnings`, `suggested_next_action`,
-`source_read_policy`, `source_read_budget_tokens`, `source_read_limits`, and
-`source_read_contract` before reading source.
+`source_read_policy`, and `source_read_budget_tokens` before reading source.
 
-## Source Budget Contract
+**Within-session caching:** After the first `get_context_packet` call in a
+conversation, save the version token from `get_memory_cache_state` or from the
+response. On every subsequent `get_context_packet` call in the same session,
+pass `if_cache_version: <saved_token>`. If the server returns `{"cached": True}`,
+reuse the previous packet — no tokens consumed. The server detects memory changes
+automatically and returns a fresh packet when the version changes.
 
-For repository work, treat `source_read_contract` as the source-read source of
-truth.
+## Source Read Policy
 
-- Track source files, source snippets, and lines per snippet before the first
-  edit.
-- Bounded snippets count toward `max_snippets`.
-- Stop at `source_read_contract.pre_edit_limits.max_snippets` before the first
-  edit.
-- Staying under `max_lines_per_snippet` is not enough if `max_snippets` is
-  exceeded.
-- If more source is needed before the first edit, record the exception before
-  exceeding the limit. Name the missing fact, likely file or symbol, and why
-  current bounded snippets are insufficient.
-- Report `source_read_budget_obeyed: no` if any contract failure condition
-  applies.
+Apply `source_read_policy` from the packet before reading any source:
+
+- `answer_from_packet`: answer from memory; skip source reads.
+- `verify_narrowly`: read only the specific snippets needed to confirm the packet;
+  stay within `source_read_budget_tokens`.
+- `mark_weak_context`: inspect source before answering, but keep reads bounded.
 
 ## Memory Refresh
 

@@ -54,6 +54,8 @@ include_sensitive=false
 
 Inspect `context_quality`, `warnings`, `suggested_next_action`, `source_read_policy`, and `source_read_budget_tokens` before reading source. If context is weak or misses the project/component, retry once at project scope before broad source reads.
 
+**Within-session caching:** After the first `get_context_packet` call in a conversation, save the version token from `get_memory_cache_state` or from the response. On every subsequent `get_context_packet` call in the same session, pass `if_cache_version: <saved_token>`. If the server returns `{"cached": True}`, reuse the previous packet — no tokens consumed. The server detects memory changes automatically and returns a fresh packet when the version changes.
+
 For source reads:
 - `answer_from_packet`: answer from memory and skip source reads.
 - `verify_narrowly`: read only the specific snippets needed to confirm the packet.

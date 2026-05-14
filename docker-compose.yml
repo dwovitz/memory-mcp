@@ -18,6 +18,24 @@ services:
     stdin_open: true
     tty: true
 
+  gateway:
+    build:
+      context: .
+    env_file:
+      - .env
+    environment:
+      POSTGRES_HOST: postgres
+      MEMORY_MCP_ENV_FILE: /app/.env
+    command: ["memory-mcp", "--transport", "streamable-http", "--host", "0.0.0.0", "--port", "3000"]
+    ports:
+      - "${GATEWAY_BIND_HOST:-0.0.0.0}:${GATEWAY_PORT:-3000}:3000"
+    volumes:
+      - .:/app
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+
   distiller:
     build:
       context: .
