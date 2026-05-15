@@ -73,9 +73,12 @@ same package can appear in Codex plugin tooling. `plugin.memory-mcp.json` is the
 memory-mcp-specific contract used by the installer. It declares:
 
 - plugin id, display name, description, version, and category
+- manifest schema version and minimum supported installer version
 - included skill files
 - included hook scripts and supported hook events
 - MCP server definitions, including command, args, cwd, and environment hints
+- supported server connection modes, such as local Docker, local HTTP, or remote
+  authenticated server
 - client targets: `codex`, `claude-code`, `vscode-copilot`, `cursor`, or any
   supported subset
 - install outputs: files to render for the target repository or user-level
@@ -115,6 +118,76 @@ Codex marketplace convention:
 Marketplace entries are metadata only. Install behavior comes from the plugin's
 memory-mcp manifest.
 
+## Versioning And Update Checks
+
+Every plugin manifest must include:
+
+- `schema_version`: the manifest schema version, starting at `"1"`.
+- `version`: the plugin package version, using semver-compatible strings.
+- `min_memory_mcp_version`: the minimum memory-mcp installer version that can
+  render the plugin.
+- `update_channel`: local channel metadata such as `stable`, `beta`, or `dev`.
+
+The installer should write an install receipt when a plugin is rendered:
+
+```text
+.memory-mcp/plugins/<plugin-name>.lock.json
+```
+
+The receipt records the plugin version, manifest schema version, source
+marketplace path, rendered client target, selected server profile name, and
+render timestamp. It must not store credentials or tokens.
+
+Minimum update-check commands:
+
+```text
+memory-mcp plugins check-updates --marketplace .agents/plugins/marketplace.json
+memory-mcp plugins check-updates memory-mcp-core --install-root <dir>
+```
+
+For the first slice, update checks are local-only: compare the install receipt
+against the currently available local marketplace plugin. Remote marketplace
+fetching and automatic updates remain out of scope. If a newer local plugin is
+available, the command reports the current version, available version, source
+path, and the render command needed to update.
+
+## First-Run Server Binding And Authentication
+
+Rendering client files is not enough for a first-time install. The plugin
+installer needs a first-run setup flow that asks which memory-mcp server profile
+the user wants the rendered clients to use.
+
+Supported first-run profile choices:
+
+- local Docker Compose server, using this repo's `docker-compose.yml`
+- local already-running HTTP hook endpoint
+- remote authenticated memory-mcp server
+- manually supplied MCP stdio command
+
+The installer should persist non-secret server profile metadata in a local
+profile file, such as:
+
+```text
+.memory-mcp/profiles/<profile-name>.json
+```
+
+Profile metadata can include server kind, display name, MCP command shape,
+base URL, workspace default, repo default, and client target defaults. It must
+not store access tokens, refresh tokens, API keys, or connection strings.
+
+Authentication is required when the selected server profile is remote or when
+the server reports that auth is enabled. The design should integrate with the
+existing auth layer and the upcoming hosted/remote hardening work. The plugin
+installer should be able to request or validate an auth profile, but credential
+storage must be delegated to the host client, OS credential store, environment
+variables, or a future explicit auth-profile mechanism. Rendered repository
+files should reference auth profile names or environment variable names, not
+embed secrets.
+
+This requirement gets its own backlog story because hosted server hardening
+covers server-side authorization, while plugin first-run setup covers client
+binding, profile selection, local update receipts, and safe credential handoff.
+
 ## First Bundled Plugin
 
 Create `plugins/memory-mcp-core/` as the first marketplace plugin. It packages
@@ -146,6 +219,7 @@ Minimum commands:
 ```text
 memory-mcp plugins list --marketplace .agents/plugins/marketplace.json
 memory-mcp plugins show memory-mcp-core
+memory-mcp plugins setup memory-mcp-core --client codex
 memory-mcp plugins render memory-mcp-core --client codex --output <dir>
 memory-mcp plugins render memory-mcp-core --client claude-code --output <dir>
 memory-mcp plugins render memory-mcp-core --client vscode-copilot --output <dir>
@@ -156,6 +230,11 @@ memory-mcp plugins render memory-mcp-core --client cursor --output <dir>
 user's live Codex, Claude Code, VS Code, or Cursor configuration in the first
 version. This avoids unsafe config mutation and makes the output easy to review,
 commit, or copy into client config through existing setup workflows.
+
+`setup` is the interactive first-run command. It asks for the server profile,
+validates required authentication for that profile, and then delegates to
+`render`. If a non-interactive environment calls `setup`, it should accept flags
+for profile name, server kind, base URL, workspace, repo, and auth profile.
 
 ## Data Flow
 
@@ -186,9 +265,13 @@ The installer should validate before rendering:
 - marketplace entry points to an existing local plugin path
 - both manifests are valid JSON
 - plugin names match their directory and marketplace entry
+- plugin version and manifest schema version are present and supported
 - declared client targets exist
 - declared hooks exist under the plugin
 - declared MCP server configs include command and args
+- selected server profile exists or can be created during setup
+- remote/auth-enabled server profiles have an auth profile or explicit
+  environment-backed credential configuration
 - output files are deterministic
 
 Errors should be clear and non-destructive. Rendering to an existing non-empty
@@ -203,6 +286,12 @@ Expected focused tests:
 - manifest loader accepts a valid `memory-mcp-core` plugin
 - manifest loader rejects missing required fields
 - marketplace loader lists local plugins in marketplace order
+- update checker reports no update when the install receipt matches the local
+  plugin version
+- update checker reports available update when the local marketplace version is
+  newer than the install receipt
+- first-run setup records a non-secret server profile
+- first-run setup requires authentication metadata for a remote server profile
 - renderer emits Codex outputs from one plugin source
 - renderer emits Claude Code outputs from one plugin source
 - renderer emits VS Code Copilot outputs from one plugin source
@@ -218,6 +307,9 @@ first slice.
 - Remote marketplace fetching
 - Signed plugins or trust policy
 - Automatic mutation of live Codex, Claude Code, VS Code, or Cursor config files
+- Storing secrets, tokens, API keys, or connection strings in rendered repo files
+- Full auth-provider implementation beyond integrating with existing and
+  planned memory-mcp auth/profile mechanisms
 - Cross-platform shell installer scripts
 - New memory retrieval behavior
 - New hook event semantics
@@ -226,11 +318,13 @@ first slice.
 
 1. Add plugin manifest schema and loader.
 2. Add marketplace loader.
-3. Add deterministic client renderer.
-4. Create `plugins/memory-mcp-core/` from the current templates and hook assets.
-5. Update `client-setups/README.md` to mark plugin install as preferred while
+3. Add version/install-receipt model and local update checks.
+4. Add non-secret server profile model and first-run setup flow.
+5. Add deterministic client renderer.
+6. Create `plugins/memory-mcp-core/` from the current templates and hook assets.
+7. Update `client-setups/README.md` to mark plugin install as preferred while
    retaining template docs for manual installs.
-6. Add tests for loader, validation, and render output.
+8. Add tests for loader, validation, update checks, setup, and render output.
 
 ## Open Design Decision
 
