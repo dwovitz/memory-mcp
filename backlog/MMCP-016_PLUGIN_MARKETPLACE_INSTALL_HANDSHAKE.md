@@ -1,56 +1,57 @@
-# MMCP-016 — Plugin marketplace install handshake and update checks
+# MMCP-016 — Plugin marketplace umbrella
 
 **Priority:** P1
-**Status:** Backlog
-**Blocked by:** MMCP-002
+**Status:** Split
+**Design:** `docs/superpowers/specs/2026-05-15-plugin-marketplace-model-design.md`
 
 ## Goal
 
-Make local marketplace plugins safe to install and maintain by adding version
-checks, first-run server binding, and authentication profile handoff for client
-setup packs.
+Turn the existing client setup templates into a local plugin marketplace model
+without moving memory retrieval, storage, auth, or hook execution into a runtime
+plugin system.
 
-This story complements hosted/remote auth hardening. Hosted mode owns
-server-side authorization. This story owns client-side plugin install behavior:
-which server a rendered client connects to, how auth requirements are surfaced,
-and how installed plugin packs check for local updates.
+The marketplace owns plugin discovery, package metadata, deterministic client
+rendering, install receipts, update checks, first-run server profile selection,
+and safe auth handoff. The MCP server continues to own memory tools,
+persistence, authorization, and hook behavior.
 
-## Scope Of Work
+## Story Split
 
-- Extend plugin manifests with `schema_version`, package `version`,
-  `min_memory_mcp_version`, `update_channel`, supported server connection modes,
-  and supported client targets.
-- Write non-secret install receipts under
-  `.memory-mcp/plugins/<plugin-name>.lock.json` after rendering a plugin.
-- Add local update checks that compare install receipts against the current
-  local marketplace plugin version and report the render command needed to
-  update.
-- Add a first-run setup flow that asks which memory-mcp server profile to use:
-  local Docker Compose, local HTTP hook endpoint, remote authenticated server,
-  or manually supplied MCP stdio command.
-- Store non-secret server profile metadata under
-  `.memory-mcp/profiles/<profile-name>.json`.
-- Require authentication metadata for remote or auth-enabled server profiles,
-  but never store tokens, API keys, refresh tokens, or connection strings in
-  rendered repository files.
-- Render profile names or environment variable references into Codex, Claude
-  Code, VS Code Copilot, and Cursor outputs.
+| ID | Title | Priority | Status | Blocked by |
+|---|---|---:|---|---|
+| MMCP-016A | Plugin package discovery and deterministic renderer | P1 | Ready | — |
+| MMCP-016B | Install receipts and local update checks | P1 | Backlog | MMCP-016A |
+| MMCP-016C | First-run non-secret server profiles | P1 | Backlog | MMCP-016A |
+| MMCP-016D | Auth handoff for remote/auth-enabled profiles | P1 | Backlog | MMCP-016C |
 
-## Acceptance Criteria
+## Sequencing
 
-- `memory-mcp plugins check-updates` reports no update when the receipt matches
-  the local plugin version.
-- `memory-mcp plugins check-updates` reports the installed and available version
-  when the local plugin version is newer than the receipt.
-- First-run setup records a non-secret profile for local Docker and manual stdio
-  server choices.
-- First-run setup refuses a remote/auth-enabled server profile unless an auth
-  profile or environment-backed credential reference is provided.
-- Rendered outputs never contain secrets and include only profile names or
-  environment variable references for credentials.
+Implement `MMCP-016A` first. It creates an installable `memory-mcp-core` package
+and render-only command surface without solving updates, setup profiles, or
+remote auth.
 
-## Dependencies
+After rendering exists, add receipts/update checks in `MMCP-016B`, then
+non-secret first-run server profiles in `MMCP-016C`, then remote/auth-enabled
+profile validation in `MMCP-016D`.
 
-- MMCP-002 for the CLI shape and auth profile command surface.
-- Existing `src/memory_mcp/auth/` and the hosted/remote hardening roadmap for
-  server-side authorization behavior.
+## Shared Constraints
+
+- Do not execute arbitrary plugin install code in the first marketplace model.
+- Do not dynamically load Python plugin code into the MCP server.
+- Do not mutate live Codex, Claude Code, VS Code, Cursor, or user-level config
+  files in the first marketplace stories.
+- Do not store secrets, tokens, API keys, refresh tokens, connection strings, or
+  raw identity payloads in plugin manifests, render outputs, receipts, or
+  profile files.
+- Keep `client-setups/` available as compatibility templates while plugin
+  rendering becomes the preferred setup path.
+
+## Implementation Notes
+
+- Add focused `memory-mcp plugins ...` subcommands while preserving current
+  `memory-mcp` behavior as the MCP server launcher when no plugin subcommand is
+  supplied.
+- A future broader CLI from `MMCP-002` can absorb these subcommands without
+  changing plugin manifests or package layout.
+- The first implementation story should use test-first development and keep
+  hook behavior unchanged.

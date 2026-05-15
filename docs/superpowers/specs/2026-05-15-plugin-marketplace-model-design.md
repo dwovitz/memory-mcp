@@ -1,7 +1,7 @@
 # memory-mcp Plugin Marketplace Model
 
 **Date:** 2026-05-15
-**Status:** Draft for review
+**Status:** Approved story split; ready for implementation planning
 
 ## Goal
 
@@ -118,6 +118,26 @@ Codex marketplace convention:
 Marketplace entries are metadata only. Install behavior comes from the plugin's
 memory-mcp manifest.
 
+## Implementation Story Split
+
+The plugin marketplace should ship as a sequence of small stories instead of
+one broad install story. `MMCP-016` remains the umbrella. The implementation
+stories are:
+
+1. `MMCP-016A` — plugin package discovery and deterministic rendering.
+2. `MMCP-016B` — install receipts and local update checks.
+3. `MMCP-016C` — first-run non-secret server profiles.
+4. `MMCP-016D` — auth handoff for remote or auth-enabled profiles.
+
+The first implementation slice is `MMCP-016A`. It creates the first
+`memory-mcp-core` plugin package, validates plugin manifests, loads the local
+marketplace, and renders deterministic client outputs. It does not mutate live
+client configuration, write install receipts, perform update checks, create
+server profiles, or validate remote authentication.
+
+The focused first slice keeps plugin packaging useful while avoiding premature
+runtime plugin loading, hosted auth coupling, or unsafe config mutation.
+
 ## Versioning And Update Checks
 
 Every plugin manifest must include:
@@ -128,7 +148,8 @@ Every plugin manifest must include:
   render the plugin.
 - `update_channel`: local channel metadata such as `stable`, `beta`, or `dev`.
 
-The installer should write an install receipt when a plugin is rendered:
+Beginning in `MMCP-016B`, the installer should write an install receipt when a
+plugin is rendered:
 
 ```text
 .memory-mcp/plugins/<plugin-name>.lock.json
@@ -145,7 +166,7 @@ memory-mcp plugins check-updates --marketplace .agents/plugins/marketplace.json
 memory-mcp plugins check-updates memory-mcp-core --install-root <dir>
 ```
 
-For the first slice, update checks are local-only: compare the install receipt
+For `MMCP-016B`, update checks are local-only: compare the install receipt
 against the currently available local marketplace plugin. Remote marketplace
 fetching and automatic updates remain out of scope. If a newer local plugin is
 available, the command reports the current version, available version, source
@@ -184,9 +205,11 @@ variables, or a future explicit auth-profile mechanism. Rendered repository
 files should reference auth profile names or environment variable names, not
 embed secrets.
 
-This requirement gets its own backlog story because hosted server hardening
-covers server-side authorization, while plugin first-run setup covers client
-binding, profile selection, local update receipts, and safe credential handoff.
+This requirement is split across follow-on stories. `MMCP-016B` owns install
+receipts and local update checks. `MMCP-016C` owns non-secret server profile
+creation and selection. `MMCP-016D` owns auth handoff for remote or auth-enabled
+profiles. Hosted server hardening remains responsible for server-side
+authorization behavior.
 
 ## First Bundled Plugin
 
@@ -210,31 +233,36 @@ the preferred install model.
 
 ## Installer Behavior
 
-Add a small Python CLI module, likely under `src/memory_mcp/plugins/`, with a
-script entry reachable through the existing `memory-mcp` console command or a
-new subcommand once a CLI exists.
+Add a small Python CLI module, likely under `src/memory_mcp/plugins/`. The
+implementation should expose focused `memory-mcp plugins ...` subcommands while
+preserving the current default `memory-mcp` behavior as the MCP server entry
+point. A broader CLI can absorb these commands later without changing the
+manifest format.
 
 Minimum commands:
 
 ```text
 memory-mcp plugins list --marketplace .agents/plugins/marketplace.json
 memory-mcp plugins show memory-mcp-core
-memory-mcp plugins setup memory-mcp-core --client codex
 memory-mcp plugins render memory-mcp-core --client codex --output <dir>
 memory-mcp plugins render memory-mcp-core --client claude-code --output <dir>
 memory-mcp plugins render memory-mcp-core --client vscode-copilot --output <dir>
 memory-mcp plugins render memory-mcp-core --client cursor --output <dir>
 ```
 
+`MMCP-016A` implements `list`, `show`, and `render`. `setup` is reserved for
+`MMCP-016C` after non-secret server profiles exist.
+
 `render` writes deterministic files into an output directory. It does not edit a
 user's live Codex, Claude Code, VS Code, or Cursor configuration in the first
 version. This avoids unsafe config mutation and makes the output easy to review,
 commit, or copy into client config through existing setup workflows.
 
-`setup` is the interactive first-run command. It asks for the server profile,
-validates required authentication for that profile, and then delegates to
-`render`. If a non-interactive environment calls `setup`, it should accept flags
-for profile name, server kind, base URL, workspace, repo, and auth profile.
+`setup` is the interactive first-run command for `MMCP-016C`. It asks for the
+server profile, validates required authentication for that profile through
+`MMCP-016D`, and then delegates to `render`. If a non-interactive environment
+calls `setup`, it should accept flags for profile name, server kind, base URL,
+workspace, repo, and auth profile.
 
 ## Data Flow
 
@@ -260,7 +288,7 @@ flowchart LR
 
 ## Validation And Errors
 
-The installer should validate before rendering:
+`MMCP-016A` should validate before rendering:
 
 - marketplace entry points to an existing local plugin path
 - both manifests are valid JSON
@@ -269,10 +297,13 @@ The installer should validate before rendering:
 - declared client targets exist
 - declared hooks exist under the plugin
 - declared MCP server configs include command and args
+- output files are deterministic
+
+Follow-on profile/auth validation belongs to later stories:
+
 - selected server profile exists or can be created during setup
 - remote/auth-enabled server profiles have an auth profile or explicit
   environment-backed credential configuration
-- output files are deterministic
 
 Errors should be clear and non-destructive. Rendering to an existing non-empty
 directory should require an explicit overwrite flag.
@@ -281,22 +312,26 @@ directory should require an explicit overwrite flag.
 
 Use test-first implementation when coding starts.
 
-Expected focused tests:
+Expected focused tests for `MMCP-016A`:
 
 - manifest loader accepts a valid `memory-mcp-core` plugin
 - manifest loader rejects missing required fields
 - marketplace loader lists local plugins in marketplace order
-- update checker reports no update when the install receipt matches the local
-  plugin version
-- update checker reports available update when the local marketplace version is
-  newer than the install receipt
-- first-run setup records a non-secret server profile
-- first-run setup requires authentication metadata for a remote server profile
 - renderer emits Codex outputs from one plugin source
 - renderer emits Claude Code outputs from one plugin source
 - renderer emits VS Code Copilot outputs from one plugin source
 - renderer emits Cursor outputs from one plugin source
 - renderer refuses to overwrite existing output unless explicitly allowed
+
+Follow-on tests:
+
+- `MMCP-016B`: update checker reports no update when the install receipt
+  matches the local plugin version.
+- `MMCP-016B`: update checker reports available update when the local
+  marketplace version is newer than the install receipt.
+- `MMCP-016C`: first-run setup records a non-secret server profile.
+- `MMCP-016D`: first-run setup requires authentication metadata for a remote
+  server profile.
 
 Existing hook tests should stay in place. Hook behavior does not change in this
 first slice.
@@ -316,20 +351,29 @@ first slice.
 
 ## Rollout
 
-1. Add plugin manifest schema and loader.
-2. Add marketplace loader.
-3. Add version/install-receipt model and local update checks.
-4. Add non-secret server profile model and first-run setup flow.
-5. Add deterministic client renderer.
-6. Create `plugins/memory-mcp-core/` from the current templates and hook assets.
-7. Update `client-setups/README.md` to mark plugin install as preferred while
-   retaining template docs for manual installs.
-8. Add tests for loader, validation, update checks, setup, and render output.
+1. `MMCP-016A`: add plugin manifest schema and loader.
+2. `MMCP-016A`: add marketplace loader.
+3. `MMCP-016A`: add deterministic client renderer.
+4. `MMCP-016A`: create `plugins/memory-mcp-core/` from the current templates
+   and hook assets.
+5. `MMCP-016A`: update `client-setups/README.md` to mark plugin install as
+   preferred while retaining template docs for manual installs.
+6. `MMCP-016B`: add version/install-receipt model and local update checks.
+7. `MMCP-016C`: add non-secret server profile model and first-run setup flow.
+8. `MMCP-016D`: add auth handoff validation for remote/auth-enabled profiles.
+9. Add tests for each story as it lands.
 
-## Open Design Decision
+## Resolved Design Decision
 
-The only remaining implementation-level choice is the CLI entrypoint. If the
-repo lands a broader `memory-mcp` CLI first, plugin commands should be nested
-under it. If not, the first slice can expose a focused script such as
-`memory-mcp-plugin` and migrate it under the broader CLI later without changing
-the manifest format.
+The CLI entrypoint for the first slice is resolved: add focused
+`memory-mcp plugins ...` subcommands while keeping `memory-mcp` with no plugin
+subcommand as the MCP server launcher. This avoids blocking plugin packaging on
+the broader CLI backlog item while preserving a clean migration path into the
+future first-class CLI.
+
+## Backward Compatibility
+
+The existing files in `client-setups/` remain available during the plugin
+marketplace rollout. `MMCP-016A` should update documentation to mark plugin
+rendering as the preferred path once available, while retaining template docs
+for manual installs.
