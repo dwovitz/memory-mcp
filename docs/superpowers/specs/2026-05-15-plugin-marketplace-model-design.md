@@ -5,28 +5,33 @@
 
 ## Goal
 
-Turn the existing Claude Code and Codex setup templates into a local plugin
-marketplace model. Plugins should bundle the skills, hooks, MCP connection
-configuration, and agent instructions an application wants its coding clients to
-use. The first implementation should make these bundles discoverable and
-installable without moving memory retrieval, storage, or hook execution into a
-runtime plugin system.
+Turn the existing Claude Code, Codex, VS Code Copilot, and Cursor setup
+templates into a local plugin marketplace model. Plugins should bundle the
+skills, hooks, MCP connection configuration, and agent instructions an
+application wants its coding clients to use. The first implementation should
+make these bundles discoverable and installable without moving memory
+retrieval, storage, or hook execution into a runtime plugin system.
 
 ## Current State
 
-`client-setups/` contains static templates for Codex and Claude Code:
+`client-setups/` contains static templates for Codex, Claude Code, VS Code
+Copilot, and Cursor:
 
 - `client-setups/codex/AGENTS.md`
 - `client-setups/codex/config.example.toml`
 - `client-setups/claude-code/CLAUDE.md`
 - `client-setups/claude-code/settings.example.json`
+- `client-setups/vscode-copilot/.github/copilot-instructions.md`
+- `client-setups/vscode-copilot/.vscode/mcp.json`
+- `client-setups/cursor/.cursor/rules/memory-mcp.mdc`
 - `client-setups/common/memory-mcp-agent-workflow.md`
 
 `hooks/` contains reusable Python hook entrypoints for Claude Code session and
 tool events. The current model works as documentation, but it does not describe
 what a pack contains, how packs are listed, how Codex and Claude Code outputs
-are rendered from one source of truth, or how teams can host multiple local
-packs for different workspaces.
+are rendered from one source of truth, how VS Code Copilot and Cursor receive
+the same workflow guidance, or how teams can host multiple local packs for
+different workspaces.
 
 ## Recommended Approach
 
@@ -58,6 +63,8 @@ plugins/<plugin-name>/
   clients/
     codex/
     claude-code/
+    vscode-copilot/
+    cursor/
   README.md
 ```
 
@@ -69,7 +76,8 @@ memory-mcp-specific contract used by the installer. It declares:
 - included skill files
 - included hook scripts and supported hook events
 - MCP server definitions, including command, args, cwd, and environment hints
-- client targets: `codex`, `claude-code`, or both
+- client targets: `codex`, `claude-code`, `vscode-copilot`, `cursor`, or any
+  supported subset
 - install outputs: files to render for the target repository or user-level
   client config
 
@@ -117,6 +125,9 @@ the current default workflow:
 - Codex MCP server config output
 - Claude Code `CLAUDE.md` output
 - Claude Code `settings.json` MCP and hook output
+- VS Code Copilot instruction output
+- VS Code MCP config output
+- Cursor rule output
 - existing hook scripts for session start, session end, post tool use, and user
   prompt submit
 
@@ -137,12 +148,14 @@ memory-mcp plugins list --marketplace .agents/plugins/marketplace.json
 memory-mcp plugins show memory-mcp-core
 memory-mcp plugins render memory-mcp-core --client codex --output <dir>
 memory-mcp plugins render memory-mcp-core --client claude-code --output <dir>
+memory-mcp plugins render memory-mcp-core --client vscode-copilot --output <dir>
+memory-mcp plugins render memory-mcp-core --client cursor --output <dir>
 ```
 
 `render` writes deterministic files into an output directory. It does not edit a
-user's live Codex or Claude Code configuration in the first version. This avoids
-unsafe config mutation and makes the output easy to review, commit, or copy into
-client config through existing setup workflows.
+user's live Codex, Claude Code, VS Code, or Cursor configuration in the first
+version. This avoids unsafe config mutation and makes the output easy to review,
+commit, or copy into client config through existing setup workflows.
 
 ## Data Flow
 
@@ -154,12 +167,16 @@ flowchart LR
     Installer["memory-mcp plugin renderer"]
     Codex["Codex config + AGENTS.md"]
     Claude["Claude Code settings + CLAUDE.md"]
+    Copilot["VS Code MCP config + Copilot instructions"]
+    Cursor["Cursor rules"]
 
     Marketplace --> Manifest
     Manifest --> Installer
     Assets --> Installer
     Installer --> Codex
     Installer --> Claude
+    Installer --> Copilot
+    Installer --> Cursor
 ```
 
 ## Validation And Errors
@@ -188,6 +205,8 @@ Expected focused tests:
 - marketplace loader lists local plugins in marketplace order
 - renderer emits Codex outputs from one plugin source
 - renderer emits Claude Code outputs from one plugin source
+- renderer emits VS Code Copilot outputs from one plugin source
+- renderer emits Cursor outputs from one plugin source
 - renderer refuses to overwrite existing output unless explicitly allowed
 
 Existing hook tests should stay in place. Hook behavior does not change in this
@@ -198,7 +217,7 @@ first slice.
 - Dynamic runtime loading of Python code into the MCP server
 - Remote marketplace fetching
 - Signed plugins or trust policy
-- Automatic mutation of live Codex or Claude Code config files
+- Automatic mutation of live Codex, Claude Code, VS Code, or Cursor config files
 - Cross-platform shell installer scripts
 - New memory retrieval behavior
 - New hook event semantics
