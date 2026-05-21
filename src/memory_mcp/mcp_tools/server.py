@@ -1247,7 +1247,10 @@ def run(transport: str = "stdio", host: str = "0.0.0.0", port: int = 3000) -> No
     if transport == "stdio":
         mcp.run()
     else:
-        mcp.run(transport=transport, host=host, port=port)
+        mcp.settings.host = host
+        mcp.settings.port = port
+        mcp.settings.stateless_http = True
+        mcp.run(transport=transport)
 
 
 def _cache_state_from_session(session: Any) -> dict[str, Any]:
