@@ -2,6 +2,41 @@
 
 PostgreSQL + pgvector memory service with MCP interface. Provides durable project memory across Claude and Codex sessions via Docker.
 
+memory-mcp is a **retrieval/projection service**, not an unchecked runtime assistant. Every agent working in this repository must satisfy the issue readiness contract before beginning implementation.
+
+## Issue Readiness — Execution Contract
+
+Full contract: `.memory-mcp/issue-contract.md`
+
+**Before beginning any implementation**, verify all of the following or abort and report:
+
+1. `status:ready` label is present on the issue (hard requirement — missing = immediate abort).
+2. Readiness score ≥ 0.7 (see scoring table in the contract).
+3. Required sections present and non-empty: Phase, Goal, Scope, Out of scope, Acceptance criteria, Dependency, `## AI documentation impact`.
+4. `## AI documentation impact` uses a recognized form (`updates-required:` list or `no-update-needed:` with rationale).
+5. Route label is present: `route:outer-harness` or `route:inner-harness`.
+
+**Fail closed**: if any check fails, stop, report the specific missing items, and do not proceed.
+
+## Outer-Harness Execution
+
+Full guidance: `.memory-mcp/outer-run.md`
+
+Key rules for outer-harness runs:
+
+- Fetch `origin/main` and branch from it: `git fetch origin && git checkout -b mmcp-{n}-{slug} origin/main`
+- Run `pytest tests/ -x -q` and `mypy src/ --ignore-missing-imports` before committing
+- Resolve `## AI documentation impact` before opening the PR
+- PR must not be a draft; include `Closes #{n}` and an outer-run trace in the body
+- `route:inner-harness` is not currently configured — stop and ask if you see it
+
+## Route Labels
+
+| Label | Meaning |
+|---|---|
+| `route:outer-harness` | AI implements directly (Claude Code or Codex CLI) — default |
+| `route:inner-harness` | Not yet configured; stop and request clarification |
+
 ## Code Exploration — Graph First
 
 Always use code-review-graph MCP tools before grep or file reads:
@@ -12,17 +47,23 @@ Always use code-review-graph MCP tools before grep or file reads:
 - `detect_changes` + `get_review_context` for code review
 - Fall back to file reads only when the graph doesn't cover what you need.
 
-## Model Routing
+## Model Routing (Codex)
 
-| Task type | Model |
-|-----------|-------|
-| File search, codebase exploration, log scanning | `gpt-5.4-mini` with low/medium reasoning |
-| Implementation, editing code, writing tests | `gpt-5.4` or inherit current model |
-| Architecture decisions, complex debugging | `gpt-5.5` with high/xhigh reasoning |
+| Work type | Model | Effort |
+|---|---|---|
+| File search, log scanning, read-only exploration | `gpt-5.4-mini` | low |
+| Documentation and contract updates | `gpt-5.1-codex` | med |
+| Schema or migration changes | `gpt-5.1-codex` | high |
+| Retrieval logic, context assembly, embedding pipeline | `gpt-5.1-codex` | high |
+| Privacy / PII handling, data minimization | `gpt-5.5-codex` | high |
+| Security review, auth, broad architecture | `gpt-5.5-codex` | high |
+| Implementation + tests (standard) | `gpt-5.1-codex` | med–high |
+| Adversarial review | `gpt-5.5-codex` | high |
 
-- `gpt-5.4-mini` subagents are read-only only — no file edits.
+- `gpt-5.4-mini` subagents are read-only — no file edits.
 - Always cap `gpt-5.4-mini` briefs: "report in under 150 words" or "return a structured list only".
-- If a listed model is unavailable in the active Codex runtime, use the closest available smaller model for read-only work and the inherited model for implementation.
+- If a listed model is unavailable, use the closest available smaller model for read-only work and the inherited model for implementation.
+- See `.memory-mcp/outer-run.md` for the full model/effort table covering both Claude and Codex.
 
 ## Agent Dispatch Patterns
 
