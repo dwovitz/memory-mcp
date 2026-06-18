@@ -1,3 +1,32 @@
+<!-- execution contract -->
+## Issue Readiness — Execution Contract
+
+Full contract: `.memory-mcp/issue-contract.md`
+Outer-harness execution guidance: `.memory-mcp/outer-run.md`
+
+**Before beginning any implementation**, verify or abort:
+
+1. `status:ready` label present (hard requirement).
+2. Readiness score ≥ 0.7 (Phase label, classification label, route label, required sections, no ambiguity markers).
+3. `## AI documentation impact` section present and uses a recognized form.
+4. Route label present: `route:outer-harness` (default) or `route:inner-harness` (not currently configured — stop and ask if seen).
+
+Fail closed on any missing item. Do not proceed under ambiguity.
+
+## Model Routing (Claude Code)
+
+Use the smallest model that preserves quality. Escalate only when scope or risk requires it.
+
+| Work type | Model | Effort |
+|---|---|---|
+| File search, log scanning, read-only exploration | Haiku 4.5 | low |
+| Documentation and contract updates | Sonnet 4.6 | med |
+| Schema or migration changes | Sonnet 4.6 | high |
+| Retrieval logic, context assembly, embedding pipeline | Sonnet 4.6 | high |
+| Privacy / PII handling, data minimization | Opus 4.8 | high |
+| Security review, auth, broad architecture | Opus 4.8 | high |
+| Implementation + tests (standard) | Sonnet 4.6 | med–high |
+
 <!-- code-review-graph MCP tools -->
 ## MCP Tools: code-review-graph
 
@@ -91,15 +120,13 @@ Memories linked to a specific entity.
 
 After meaningful changes, refresh memory with compact, non-sensitive project facts, decisions, commands, constraints, and workflow updates. Never store secrets, credentials, raw logs, transcripts, or sensitive customer data.
 
-## Model Routing
+## Subagent Model Routing
 
-When dispatching Claude Code subagents, use the smallest model that preserves quality:
+See the full model/effort table in the `## Model Routing (Claude Code)` section above.
 
-- File search, codebase exploration, log scanning: Haiku, read-only, capped output.
-- Implementation, editing code, writing tests: Sonnet or inherited default.
-- Architecture decisions, complex debugging, deep reasoning: Opus only when Sonnet is insufficient.
+For subagent dispatch: use Haiku for read-only work (capped output), Sonnet for implementation, Opus only when Sonnet is insufficient for architecture or privacy/security scope.
 
-If the active client does not expose per-agent model selection, keep the default model and preserve the same read-only/capped-output subagent discipline.
+If the active client does not expose per-agent model selection, keep the default model and preserve the read-only/capped-output discipline.
 
 ## Agent Dispatch Patterns
 
