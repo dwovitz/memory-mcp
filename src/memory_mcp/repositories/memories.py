@@ -193,6 +193,31 @@ class MemoryRepository:
         )
         return list(self.session.scalars(stmt).unique())
 
+    def find_active_wiki_by_source(
+        self,
+        *,
+        collection: str,
+        path: str,
+        section: str | None = None,
+    ) -> Memory | None:
+        """Exact lookup of an active wiki projection by its source provenance.
+
+        Deterministic reference resolver: matches the nested provenance markers
+        (``metadata.source.collection``/``path`` and, when given, ``section``)
+        written by wiki ingestion. Returns the single active projection for that
+        canonical source location, or ``None``.
+        """
+        stmt = (
+            select(Memory)
+            .where(Memory.status == "active")
+            .where(Memory.metadata_["source"]["provenance"].astext == "wiki")
+            .where(Memory.metadata_["source"]["collection"].astext == collection)
+            .where(Memory.metadata_["source"]["path"].astext == path)
+        )
+        if section is not None:
+            stmt = stmt.where(Memory.metadata_["source"]["section"].astext == section)
+        return self.session.scalars(stmt).first()
+
     def _require(self, memory_id: UUID) -> Memory:
         memory = self.get(memory_id)
         if memory is None:

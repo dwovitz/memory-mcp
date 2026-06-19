@@ -22,6 +22,10 @@ see [CLIENT_SETUP_README.md](CLIENT_SETUP_README.md).
 - **Wiki ingestion**: index a local file-based wiki as the canonical source of
   private knowledge, with provenance, sensitivity, and deterministic reindex —
   see [docs/wiki_ingestion.md](docs/wiki_ingestion.md).
+- **Retrieval and projection**: combined lexical/semantic/structured retrieval
+  with bounded, provenance-backed relationship expansion and exact lookup over
+  wiki-derived chunks and the entity graph — see
+  [docs/retrieval.md](docs/retrieval.md).
 
 The current implementation includes:
 

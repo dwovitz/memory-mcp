@@ -103,8 +103,47 @@ with session_scope() as session:
 After ingestion, run `scripts/backfill_embeddings.py` to populate embeddings for
 the new projections (embeddings are computed lazily, not at write time).
 
+## Graph projection
+
+Alongside the per-section memory projections (the "facts" / semantic chunks),
+`memory-mcp` projects the wiki's **link structure** into a reviewable entity
+graph via `WikiGraphService`:
+
+- one `wiki_document` **entity** per source file, and
+- one `references` **relationship** per resolved link.
+
+Extraction is **deterministic and reviewable**. Only explicit links to *known*
+documents in the same collection become edges:
+
+- `[[wikilink]]` (with optional `#anchor` and `|alias`), and
+- inline Markdown links to another `.md` file (`[text](path/to/file.md)`).
+
+Targets resolve by full relative path, by path without the `.md` suffix, or by an
+**unambiguous** file stem. Ambiguous stems, self-links, and links to unknown
+documents are skipped, so an edge never silently points at the wrong file.
+Nothing is inferred by a model.
+
+Every entity and relationship carries provenance and the source's sensitivity:
+
+| Projection | Identity | Provenance |
+|---|---|---|
+| `wiki_document` entity | `attributes.ingest_key` = hash(`collection :: doc :: path`) | `attributes.source` (collection, path, file hash, times) |
+| `references` relationship | `metadata.ref_key` = hash(`collection :: ref :: src :: tgt`) | `metadata.source` (collection, source/target paths, link, time) |
+
+The graph projection shares the wiki's reconciliation guarantees: re-running over
+unchanged files updates the same nodes/edges, and documents or links removed from
+the canonical wiki are archived by a **collection-scoped stale sweep** so other
+graph data is never touched. The `scripts/ingest_wiki.py` CLI runs the graph
+projection automatically after section ingestion and prints the entity/edge
+counts. See [retrieval.md](retrieval.md) for how these projections are queried
+with bounded relationship expansion.
+
 ## Validation
 
 `tests/ingest/test_wiki_ingest.py` covers provenance stamping, private
 classification, idempotent re-runs, changed-source reindexing, removed-section
 and removed-file archival, and collection-scoped isolation of the stale sweep.
+
+`tests/ingest/test_wiki_graph.py` covers deterministic document/reference
+projection, wikilink and Markdown-link resolution, idempotency, and
+collection-scoped archival of stale documents and references.

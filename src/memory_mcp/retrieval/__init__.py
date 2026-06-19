@@ -7,6 +7,12 @@ from memory_mcp.retrieval.service import (
     PROJECT_CONTEXT_MEMORY_TYPES,
     VectorSearchPlan,
 )
+from memory_mcp.retrieval.projection import (
+    DEFAULT_SENSITIVITIES,
+    ProjectionRetrievalResult,
+    ProjectionRetrievalService,
+    RetrievedItem,
+)
 
 __all__ = [
     "EntitySearchResult",
@@ -14,4 +20,8 @@ __all__ = [
     "MemorySearchResult",
     "PROJECT_CONTEXT_MEMORY_TYPES",
     "VectorSearchPlan",
+    "DEFAULT_SENSITIVITIES",
+    "ProjectionRetrievalResult",
+    "ProjectionRetrievalService",
+    "RetrievedItem",
 ]

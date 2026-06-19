@@ -10,6 +10,14 @@ from memory_mcp.ingest.wiki import (
     WikiSource,
     build_wiki_records,
 )
+from memory_mcp.ingest.wiki_graph import (
+    WIKI_DOCUMENT_ENTITY_TYPE,
+    WIKI_REFERENCES_RELATIONSHIP,
+    WikiGraphProjection,
+    WikiGraphResult,
+    WikiGraphService,
+    build_wiki_graph_projection,
+)
 
 __all__ = [
     "SourceConfig",
@@ -23,4 +31,10 @@ __all__ = [
     "WikiIngestService",
     "WikiSource",
     "build_wiki_records",
+    "WIKI_DOCUMENT_ENTITY_TYPE",
+    "WIKI_REFERENCES_RELATIONSHIP",
+    "WikiGraphProjection",
+    "WikiGraphResult",
+    "WikiGraphService",
+    "build_wiki_graph_projection",
 ]
