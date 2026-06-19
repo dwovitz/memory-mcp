@@ -11,6 +11,9 @@ large files.
   roadmap.
 - [Architecture](ARCHITECTURE.md) explains the system shape, storage model,
   retrieval flow, lifecycle rules, and Mermaid diagrams.
+- [Wiki Ingestion](wiki_ingestion.md) explains indexing a canonical local wiki
+  as provenance-stamped, private-by-default projections with deterministic
+  reindex and stale-projection archival.
 - [Backlog](BACKLOG.md) indexes the current GitHub-backed memory safety and
   compiled-view backlog direction.
 - [Agent Workflow](AGENT_WORKFLOW.md) explains how agents should retrieve,

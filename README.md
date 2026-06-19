@@ -19,6 +19,9 @@ see [CLIENT_SETUP_README.md](CLIENT_SETUP_README.md).
 - [Benchmark cases](benchmarks/README.md)
 - **Auto-capture**: hook-driven session ingestion with background distillation —
   see [docs/auto_capture.md](docs/auto_capture.md).
+- **Wiki ingestion**: index a local file-based wiki as the canonical source of
+  private knowledge, with provenance, sensitivity, and deterministic reindex —
+  see [docs/wiki_ingestion.md](docs/wiki_ingestion.md).
 
 The current implementation includes:
 
