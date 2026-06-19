@@ -1,0 +1,27 @@
+id,title,priority,status,blocked_by,backlog_file,notes
+MMCP-001,Implement scheduled Memory Dream consolidation worker,P0,Backlog,,CANONICAL_BACKLOG.md,
+MMCP-002,Build CLI for memory-MCP,P1,Backlog,,CANONICAL_BACKLOG.md,
+MMCP-003,Track 1: Auto-capture + distillation,P0,Ready,,CANONICAL_BACKLOG.md,Spec in docs/prompts/impl-auto-capture.md
+MMCP-004,Define SafeMemoryContract for trusted durable memory,P0,Backlog,,CANONICAL_BACKLOG.md,
+MMCP-005,Add durable compiled memory views with source provenance,P1,Backlog,,CANONICAL_BACKLOG.md,
+MMCP-006,Workspace Ingestion Pipeline,P0,Backlog,,CANONICAL_BACKLOG.md,New ingest package
+MMCP-007,repo as first-class retrieval scope + GIN index,P0,Backlog,,CANONICAL_BACKLOG.md,scopes.py + migration
+MMCP-008,Semantic (vector) retrieval with HNSW,P0,Backlog,,CANONICAL_BACKLOG.md,New embeddings package
+MMCP-009,Code citations on memories,P1,Backlog,MMCP-007,CANONICAL_BACKLOG.md,schema migration + validator
+MMCP-010,Quick Win QW3 - cited_path filter on search_memory,P1,Backlog,MMCP-009,CANONICAL_BACKLOG.md,
+MMCP-011,Quick Win QW1 - Markdown workspace ingest script,P1,Backlog,MMCP-006,CANONICAL_BACKLOG.md,
+MMCP-012,Upgrade request classifier beyond keyword lists,P1,Backlog,"MMCP-006,MMCP-008",CANONICAL_BACKLOG.md,
+MMCP-013,Event-flow memory types + get_event_flow tool,P2,Backlog,MMCP-006,CANONICAL_BACKLOG.md,
+MMCP-014,Multi-repo context packet diagnostics,P2,Backlog,MMCP-012,CANONICAL_BACKLOG.md,
+MMCP-015,Multi-repo retrieval-precision benchmarks,P2,Backlog,MMCP-008,CANONICAL_BACKLOG.md,
+MMCP-016,Plugin marketplace umbrella,P1,Split,,MMCP-016_PLUGIN_MARKETPLACE_INSTALL_HANDSHAKE.md,Split into MMCP-016A through MMCP-016D
+MMCP-016A,Plugin package discovery and deterministic renderer,P1,Ready,,MMCP-016A_PLUGIN_PACKAGE_RENDERER.md,First implementation slice
+MMCP-016B,Install receipts and local update checks,P1,Backlog,MMCP-016A,MMCP-016B_PLUGIN_INSTALL_RECEIPTS_UPDATES.md,
+MMCP-016C,First-run non-secret server profiles,P1,Backlog,MMCP-016A,MMCP-016C_PLUGIN_SERVER_PROFILES.md,
+MMCP-016D,Auth handoff for remote/auth-enabled profiles,P1,Backlog,MMCP-016C,MMCP-016D_PLUGIN_AUTH_HANDOFF.md,
+MMCP-KL-001,Define retrieval evidence envelope,P0,Backlog,,KNOWLEDGE_LAYER_BACKLOG.md,
+MMCP-KL-002,Add freshness and decay semantics to memory records,P0,Backlog,,KNOWLEDGE_LAYER_BACKLOG.md,
+MMCP-KL-003,Define retrieval-grade tiers for memory consumers,P0,Backlog,,KNOWLEDGE_LAYER_BACKLOG.md,
+MMCP-KL-004,Add contradiction and conflict-set indexing,P1,Backlog,,KNOWLEDGE_LAYER_BACKLOG.md,
+MMCP-KL-005,Define progressive-disclosure context packets,P1,Backlog,,KNOWLEDGE_LAYER_BACKLOG.md,
+MMCP-KL-006,Add retrieval observability and audit trails,P1,Backlog,,KNOWLEDGE_LAYER_BACKLOG.md,

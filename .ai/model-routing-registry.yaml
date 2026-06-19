@@ -1,0 +1,138 @@
+# Canonical AI model routing registry for memory-mcp agents.
+#
+# Purpose:
+# - Prevent agents from inventing harness names, model names, or effort levels.
+# - Give routing agents one small, parseable source of truth.
+# - memory-mcp uses Claude Code as the primary harness.
+#
+# Contract for routing agents:
+# - Return exactly one object with: harness, model, effort.
+# - harness MUST be one of top-level harnesses below.
+# - model MUST be one of the model ids or aliases listed for that harness.
+# - effort MUST be one of the effort ids listed for that harness.
+# - Do not return display names, marketing names, or inferred aliases.
+
+schema_version: 1
+last_reviewed: 2026-05-14
+
+routing_output_contract:
+  required_fields:
+    - harness
+    - model
+    - effort
+  example:
+    harness: claude
+    model: sonnet
+    effort: medium
+
+harnesses:
+  claude:
+    description: "Claude Code harness — primary harness for memory-mcp development."
+    output_shape:
+      harness: "claude"
+      model: "one of harnesses.claude.models[].id"
+      effort: "one of harnesses.claude.efforts[].id"
+    default:
+      model: sonnet
+      effort: medium
+    models:
+      - id: sonnet
+        display_name: Claude Sonnet alias
+        role: daily_coding
+        notes: "Default for planning, implementation, review, and most passes."
+        allowed_efforts: [low, medium, high, xhigh, max]
+      - id: opus
+        display_name: Claude Opus alias
+        role: complex_reasoning
+        notes: "Use for hard architecture decisions, deep security review, or complex judge review. Explicit escalation rationale required."
+        allowed_efforts: [low, medium, high, xhigh, max]
+      - id: opusplan
+        display_name: Claude Opus Plan alias
+        role: hybrid_plan_then_execute
+        notes: "Opus during plan mode, then Sonnet for execution. Use for large ambiguous stories."
+        allowed_efforts: [low, medium, high, xhigh, max]
+      - id: haiku
+        display_name: Claude Haiku alias
+        role: cheap_simple_tasks
+        notes: "Fast/cheap. Use only for read-only search, classification, or trivial edits."
+        allowed_efforts: [low, medium]
+    efforts:
+      - id: low
+        meaning: "Low effort for cheap bounded tasks."
+        use_for: "Simple routing, summary, classification, docs cleanup."
+      - id: medium
+        meaning: "Default effort for normal planning, review, and implementation."
+        use_for: "Normal Claude Code use and routine planning/review."
+      - id: high
+        meaning: "Higher effort for complex planning, review, or reconciliation."
+        use_for: "Architecture-sensitive work, difficult review, security-sensitive changes."
+      - id: xhigh
+        meaning: "Extra-high effort for rare deep reasoning tasks."
+        use_for: "Hard architecture, security design, or complex judge review."
+      - id: max
+        meaning: "Maximum effort."
+        use_for: "Rare: severe bug hunts, high-stakes architecture, expensive review only."
+    selection_rules:
+      - "Prefer sonnet + medium for normal coding, planning, and review."
+      - "Use sonnet + high for architecture-sensitive, security-sensitive, or schema-change work."
+      - "Use opusplan + medium or high for plan-then-execute on large or ambiguous stories."
+      - "Use opus + high or xhigh only with explicit escalation rationale."
+      - "Use haiku + low or medium only for cheap/simple read-only tasks."
+
+fallback_policy:
+  invalid_harness: "Reject and use claude."
+  invalid_model: "Reject and choose the nearest valid model id from the claude harness."
+  invalid_effort: "Reject and choose the nearest valid effort id from the claude harness."
+  missing_effort: "Use medium."
+  missing_model: "Use sonnet."
+
+recommended_routes:
+  cheap_edit:
+    harness: claude
+    model: haiku
+    effort: low
+  normal_coding:
+    harness: claude
+    model: sonnet
+    effort: medium
+  difficult_coding:
+    harness: claude
+    model: sonnet
+    effort: high
+  architecture_review:
+    harness: claude
+    model: opus
+    effort: high
+  daily_coding:
+    harness: claude
+    model: sonnet
+    effort: medium
+  plan_then_execute:
+    harness: claude
+    model: opusplan
+    effort: medium
+  security_review:
+    harness: claude
+    model: sonnet
+    effort: high
+
+disallowed_values:
+  harnesses:
+    - openai
+    - anthropic
+    - chatgpt
+    - codex
+    - codex-cli
+  claude_models:
+    - claude-4-opus
+    - claude-4-sonnet
+    - opus-4.1
+    - sonnet-4
+  claude_efforts:
+    - none
+    - minimal
+    - standard
+    - think-1024
+    - think-4096
+    - think-10000
+    - think-32000
