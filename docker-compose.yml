@@ -43,8 +43,11 @@ services:
       - .env
     environment:
       POSTGRES_HOST: postgres
+      MEMORY_MCP_ENV_FILE: /app/.env
       LOG_LEVEL: INFO
     command: ["python", "-m", "memory_mcp.distiller.runner"]
+    volumes:
+      - .:/app
     depends_on:
       postgres:
         condition: service_healthy
