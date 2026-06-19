@@ -177,6 +177,22 @@ class MemoryRepository:
         )
         return self.session.scalars(stmt).first()
 
+    def list_active_wiki_memories(self, collection: str) -> Sequence[Memory]:
+        """List active wiki-derived projections for a single collection.
+
+        Matches on the nested provenance markers written by wiki ingestion
+        (``metadata.source.provenance == 'wiki'`` and
+        ``metadata.source.collection == collection``) so the stale-projection
+        sweep stays scoped to one wiki and never touches other memories.
+        """
+        stmt = (
+            select(Memory)
+            .where(Memory.status == "active")
+            .where(Memory.metadata_["source"]["provenance"].astext == "wiki")
+            .where(Memory.metadata_["source"]["collection"].astext == collection)
+        )
+        return list(self.session.scalars(stmt).unique())
+
     def _require(self, memory_id: UUID) -> Memory:
         memory = self.get(memory_id)
         if memory is None:

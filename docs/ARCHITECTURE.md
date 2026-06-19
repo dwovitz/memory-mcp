@@ -321,6 +321,22 @@ Lifecycle rules:
 - Deleted is a logical status, not a physical purge.
 - Pruning writes decisions to `pruning_log`.
 
+## Ingestion and Projections
+
+`memory-mcp` can seed memory from external sources. Two ingestion paths exist:
+
+- **Auto-capture** — hook-driven session events distilled into typed memories
+  (see [auto_capture.md](auto_capture.md)).
+- **Wiki ingestion** — a local file-based wiki treated as the *canonical*
+  source of private knowledge. `memory-mcp` stores derived **projections** of
+  each Markdown section, stamped with provenance (`metadata.source`: path,
+  section, content hash, file hash, modified time, ingestion time), classified
+  `private` by default, and reconciled to the canonical source on every run.
+  Unchanged sections are skipped (idempotent), changed sections supersede their
+  prior projection, and removed sections or files are archived as stale
+  projections, scoped by `collection`. The wiki stays canonical; `memory-mcp`
+  never edits it. See [wiki_ingestion.md](wiki_ingestion.md).
+
 ## Safety Boundaries
 
 - The server is designed for trusted local stdio clients.

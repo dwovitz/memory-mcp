@@ -52,6 +52,11 @@ class IngestWriter:
             ingest_key: str = mem["metadata"]["ingest_key"]
             existing = self._find_by_ingest_key(ingest_key)
             code_citations = mem.get("code_citations")
+            # Propagate sensitivity only when the caller supplies it, so callers
+            # that omit it (and existing tests) keep the service-layer default.
+            extra: dict[str, Any] = {}
+            if "sensitivity" in mem:
+                extra["sensitivity"] = mem["sensitivity"]
 
             if existing is None:
                 created_mem = self._service.create_memory(
@@ -59,6 +64,7 @@ class IngestWriter:
                     memory_type=mem["memory_type"],
                     applies_to=mem.get("applies_to"),
                     metadata=mem.get("metadata"),
+                    **extra,
                 )
                 if code_citations is not None:
                     created_mem.code_citations = code_citations
@@ -72,6 +78,7 @@ class IngestWriter:
                     memory_type=mem["memory_type"],
                     applies_to=mem.get("applies_to"),
                     metadata=mem.get("metadata"),
+                    **extra,
                 )
                 if code_citations is not None:
                     updated_mem.code_citations = code_citations

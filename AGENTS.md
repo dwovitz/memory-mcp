@@ -101,3 +101,7 @@ For source reads:
 When storing memories with `add_memory`, include `repo="memory-mcp"` in the scope for finer routing.
 
 After meaningful changes, refresh memory with compact, non-sensitive project facts, decisions, commands, constraints, and workflow updates. Never store secrets, credentials, raw logs, transcripts, or sensitive customer data.
+
+## Knowledge Ingestion
+
+A local file-based wiki is the **canonical** source of private human-readable knowledge. `memory-mcp` stores **projections** of it — searchable derived records with provenance (`metadata.source`), classified `private` by default. Treat the wiki as the source of truth; never make `memory-mcp` the canonical editor of wiki content, and do not hand-author memories that duplicate canonical wiki sections — run wiki ingestion instead (`scripts/ingest_wiki.py`, `memory_mcp.ingest.wiki.WikiIngestService`). Ingestion is idempotent: unchanged sections are skipped, changed sections supersede, and removed sections/files are archived. See [docs/wiki_ingestion.md](docs/wiki_ingestion.md).

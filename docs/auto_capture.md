@@ -22,6 +22,11 @@ Claude Code session
                   IngestWriter ─► memories table (typed, scoped, deduped)
 ```
 
+Auto-capture is one of two ingestion paths that share the `IngestWriter`
+dedup/supersession primitive. The other is **wiki ingestion**, which projects a
+canonical local wiki into provenance-stamped, private-by-default records and
+reconciles them on every run — see [wiki_ingestion.md](wiki_ingestion.md).
+
 Multiple distiller workers can run concurrently; `claim_batch` uses
 `SELECT ... FOR UPDATE SKIP LOCKED` so they never collide. UserPromptSubmit
 also pulls a `get_context_packet` and injects it into the model context, so
