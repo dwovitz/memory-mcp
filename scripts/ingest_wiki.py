@@ -64,6 +64,7 @@ def run(
 
     from memory_mcp.db import session_scope
     from memory_mcp.ingest.wiki import WikiIngestService
+    from memory_mcp.ingest.wiki_graph import WikiGraphService
     from memory_mcp.services.memory_service import MemoryService
 
     try:
@@ -71,6 +72,8 @@ def run(
             service = MemoryService(session)
             ingest = WikiIngestService(service)
             result = ingest.ingest([source])
+            graph = WikiGraphService(service.entities, service.relationships)
+            graph_result = graph.project([source])
             session.commit()
     except Exception as exc:  # noqa: BLE001
         print(f"ERROR writing to DB: {exc}", file=sys.stderr)
@@ -81,6 +84,12 @@ def run(
     print(f"  Updated:  {result.updated}")
     print(f"  Skipped:  {result.skipped}")
     print(f"  Archived: {result.archived}")
+    print("\nGraph projection:")
+    print(f"  Entities:      +{graph_result.entities_created} ~{graph_result.entities_updated} -{graph_result.entities_archived}")
+    print(
+        "  Relationships: "
+        f"+{graph_result.relationships_created} ~{graph_result.relationships_updated} -{graph_result.relationships_archived}"
+    )
     return 0
 
 

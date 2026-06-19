@@ -24,8 +24,12 @@ Claude Code session
 
 Auto-capture is one of two ingestion paths that share the `IngestWriter`
 dedup/supersession primitive. The other is **wiki ingestion**, which projects a
-canonical local wiki into provenance-stamped, private-by-default records and
-reconciles them on every run — see [wiki_ingestion.md](wiki_ingestion.md).
+canonical local wiki into provenance-stamped, private-by-default records (and a
+deterministic `wiki_document`/`references` entity graph) and reconciles them on
+every run — see [wiki_ingestion.md](wiki_ingestion.md). Both paths feed the
+combined, provenance-backed retrieval in [retrieval.md](retrieval.md); their
+captured/projected memories carry the `metadata.source` provenance that
+retrieval surfaces as *why-retrieved* reasons.
 
 Multiple distiller workers can run concurrently; `claim_batch` uses
 `SELECT ... FOR UPDATE SKIP LOCKED` so they never collide. UserPromptSubmit

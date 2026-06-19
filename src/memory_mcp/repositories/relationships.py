@@ -189,6 +189,75 @@ class RelationshipRepository:
             q = q.filter(Relationship.relationship_type.in_(relationship_types))
         return q.all()
 
+    def find_active_by_metadata(self, field: str, value: str) -> Relationship | None:
+        """Return the first active relationship whose ``metadata[field]`` equals ``value``."""
+        stmt = (
+            select(Relationship)
+            .where(Relationship.status == "active")
+            .where(Relationship.metadata_[field].astext == value)
+        )
+        return self.session.scalars(stmt).first()
+
+    def list_active_wiki_references(self, collection: str) -> Sequence[Relationship]:
+        """List active wiki ``references`` edges for a single collection.
+
+        Matches the nested provenance markers written by wiki graph projection
+        (``metadata.source.provenance == 'wiki'`` and
+        ``metadata.source.collection == collection``) so the stale sweep stays
+        scoped to one wiki and never touches other relationships.
+        """
+        stmt = (
+            select(Relationship)
+            .where(Relationship.status == "active")
+            .where(Relationship.relationship_type == "references")
+            .where(Relationship.metadata_["source"]["provenance"].astext == "wiki")
+            .where(Relationship.metadata_["source"]["collection"].astext == collection)
+        )
+        return list(self.session.scalars(stmt).unique())
+
+    def upsert_provenance(
+        self,
+        *,
+        source_entity_id: UUID,
+        target_entity_id: UUID,
+        relationship_type: str,
+        ref_key: str,
+        description: str | None = None,
+        metadata: dict[str, Any] | None = None,
+        applies_to: dict[str, Any] | None = None,
+        sensitivity: str = "normal",
+    ) -> tuple["Relationship", str]:
+        """Idempotently upsert a provenance-stamped relationship keyed by ``ref_key``.
+
+        Identity is the projection ``ref_key`` stored at ``metadata['ref_key']``,
+        so re-deriving an unchanged edge updates the same row. Returns
+        ``(relationship, status)`` where status is ``'created'`` or ``'updated'``.
+        """
+        merged_metadata = dict(metadata or {})
+        merged_metadata["ref_key"] = ref_key
+        existing = self.find_active_by_metadata("ref_key", ref_key)
+        if existing is not None:
+            existing.source_entity_id = source_entity_id
+            existing.target_entity_id = target_entity_id
+            existing.relationship_type = relationship_type
+            if description is not None:
+                existing.description = description
+            existing.metadata_ = merged_metadata
+            if applies_to is not None:
+                existing.applies_to = applies_to
+            existing.sensitivity = sensitivity
+            return existing, "updated"
+        relationship = self.create(
+            source_entity_id=source_entity_id,
+            target_entity_id=target_entity_id,
+            relationship_type=relationship_type,
+            description=description,
+            metadata=merged_metadata,
+            applies_to=applies_to,
+            sensitivity=sensitivity,
+        )
+        return relationship, "created"
+
     def _require(self, relationship_id: UUID) -> Relationship:
         relationship = self.get(relationship_id)
         if relationship is None:

@@ -183,6 +183,17 @@ Vector search is scaffolded only. The `memories.embedding` column and pgvector
 extension are available, but embedding generation and HNSW indexing are deferred
 until a fixed embedding model and dimension are selected.
 
+### Projection retrieval
+
+`ProjectionRetrievalService` layers **bounded relationship expansion** over the
+hybrid ranking above. It combines lexical, semantic, structured, recency, and
+confidence signals with traversal of the wiki-derived entity graph, bounded by
+graph depth, expanded-result count, sensitivity, and a context token budget.
+Each returned item explains *why* it was retrieved (`primary_match`,
+`relationship_expansion`, or `exact_lookup`) and carries its source provenance,
+and deterministic exact lookup (by `ingest_key` or canonical source location)
+stays available. See [retrieval.md](retrieval.md).
+
 ## Scope Hierarchy
 
 Classic hierarchy fields are stored in `applies_to`:
@@ -336,6 +347,11 @@ Lifecycle rules:
   prior projection, and removed sections or files are archived as stale
   projections, scoped by `collection`. The wiki stays canonical; `memory-mcp`
   never edits it. See [wiki_ingestion.md](wiki_ingestion.md).
+- **Graph projection** — alongside section chunks, wiki link structure is
+  projected deterministically into `wiki_document` entities and `references`
+  relationships, each provenance-stamped and reconciled by the same
+  collection-scoped stale sweep. These feed bounded relationship expansion in
+  [retrieval.md](retrieval.md).
 
 ## Safety Boundaries
 

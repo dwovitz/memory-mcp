@@ -126,6 +126,69 @@ class EntityRepository:
         self.session.flush()
         return entity, "created"
 
+    def find_active_by_attribute(self, field: str, value: str) -> Entity | None:
+        """Return the first active entity whose ``attributes[field]`` equals ``value``."""
+        stmt = (
+            select(Entity)
+            .where(Entity.status == "active")
+            .where(Entity.attributes[field].astext == value)
+        )
+        return self.session.scalars(stmt).first()
+
+    def list_active_wiki_documents(self, collection: str) -> Sequence[Entity]:
+        """List active wiki document entities for a single collection.
+
+        Matches the nested provenance markers written by wiki graph projection
+        (``attributes.source.provenance == 'wiki'`` and
+        ``attributes.source.collection == collection``) so the stale sweep stays
+        scoped to one wiki and never touches other entities.
+        """
+        stmt = (
+            select(Entity)
+            .where(Entity.status == "active")
+            .where(Entity.entity_type == "wiki_document")
+            .where(Entity.attributes["source"]["provenance"].astext == "wiki")
+            .where(Entity.attributes["source"]["collection"].astext == collection)
+        )
+        return list(self.session.scalars(stmt).unique())
+
+    def upsert_provenance(
+        self,
+        *,
+        entity_type: str,
+        name: str,
+        ingest_key: str,
+        attributes: dict[str, Any] | None = None,
+        applies_to: dict[str, Any] | None = None,
+        sensitivity: str = "normal",
+    ) -> tuple["Entity", str]:
+        """Idempotently upsert a provenance-stamped entity keyed by ``ingest_key``.
+
+        Identity is the projection ``ingest_key`` stored at
+        ``attributes['ingest_key']`` (not ``(entity_type, name)``), so renaming a
+        source file updates the same node instead of orphaning it. Returns
+        ``(entity, status)`` where status is ``'created'`` or ``'updated'``.
+        """
+        merged_attributes = dict(attributes or {})
+        merged_attributes["ingest_key"] = ingest_key
+        existing = self.find_active_by_attribute("ingest_key", ingest_key)
+        if existing is not None:
+            existing.entity_type = entity_type
+            existing.name = name
+            existing.attributes = merged_attributes
+            if applies_to is not None:
+                existing.applies_to = applies_to
+            existing.sensitivity = sensitivity
+            return existing, "updated"
+        entity = self.create(
+            entity_type=entity_type,
+            name=name,
+            attributes=merged_attributes,
+            applies_to=applies_to,
+            sensitivity=sensitivity,
+        )
+        return entity, "created"
+
     def _require(self, entity_id: UUID) -> Entity:
         entity = self.get(entity_id)
         if entity is None:
