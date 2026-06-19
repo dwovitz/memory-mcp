@@ -132,15 +132,13 @@ def test_context_packet_to_dict_includes_rendered_and_token_estimates() -> None:
     assert data["suggested_next_action"] == "answer_from_packet"
     assert data["source_read_policy"] == "path_enum_only"
     assert data["source_read_budget_tokens"] == 0
-    assert data["source_read_limits"]["max_snippets"] == 0
-    assert data["source_read_contract"]["version"] == "source-read-contract/v1"
-    assert data["source_read_contract"]["pre_edit_limits"]["max_snippets"] == 0
-    assert data["diagnostics"]["fallback_attempts"] == []
-    assert data["diagnostics"]["suggested_next_action"] == "answer_from_packet"
-    assert data["diagnostics"]["source_read_policy"] == "path_enum_only"
-    assert data["diagnostics"]["source_read_budget_tokens"] == 0
-    assert data["diagnostics"]["source_read_limits"]["source_content_allowed"] is False
-    assert data["diagnostics"]["source_read_contract"]["source_read_policy"] == "path_enum_only"
+    # The slim packet dict (commit 42922e6) intentionally omits source_read_limits,
+    # source_read_contract, and the nested diagnostics blob — they were static, never
+    # parsed programmatically, and added ~1400-2000 redundant tokens per call. The full
+    # contract still lives on packet.diagnostics for callers that need it.
+    assert "source_read_limits" not in data
+    assert "source_read_contract" not in data
+    assert "diagnostics" not in data
     assert data["classification"]["domain"] == "project"
     assert data["classification"]["memory_types"] == ["project_fact"]
     assert data["facts"] == ["Uses PostgreSQL."]

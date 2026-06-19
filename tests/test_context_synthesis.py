@@ -291,12 +291,10 @@ def test_weak_component_packet_retries_project_scope_with_diagnostics() -> None:
     assert packet.diagnostics["source_read_limits"]["max_snippets"] == 6
     assert packet.diagnostics["source_read_limits"]["max_lines_per_snippet"] == 40
     assert any("Fallback broadened retrieval" in warning for warning in packet.diagnostics["warnings"])
+    # render() now emits only the slim 3-line guidance summary (commit 42922e6); the
+    # detailed search/snippet rules remain on packet.diagnostics, asserted above.
     assert "## Source Read Guidance" in packet.render()
     assert "Recommended post-packet source budget: 2000 tokens." in packet.render()
-    rendered = packet.render()
-    assert "If fast search such as rg is unavailable, run path-only search first before reading snippets" in rendered
-    assert rendered.index("path-only search first") < rendered.index("read only bounded snippets")
-    assert "Broad recursive source-output dumps are disallowed as a substitute for search" in rendered
 
 
 def test_project_packet_with_only_workspace_context_marks_weak_context() -> None:
@@ -383,16 +381,9 @@ def test_source_read_guidance_separates_discovery_from_bounded_snippets() -> Non
     assert limits["bounded_snippets_still_count_toward_budget"] is True
     assert limits["stop_at_max_snippets_before_edit"] is True
     assert limits["exceeding_snippet_count_counts_as_budget_failure"] is True
-    assert "Path-only commands are discovery-only" in rendered
-    assert "Select-String -List is allowed only when listing matching files for discovery" in rendered
-    assert "Select-String output with matching source lines is a source snippet read" in rendered
-    assert "After discovery, read only bounded snippets from selected files" in rendered
-    assert "discard oversized snippet output" in rendered
-    assert "count the incident as a source-read budget failure" in rendered
-    assert "Bounded snippets still count toward source_read_limits.max_snippets" in rendered
-    assert "Staying under max_lines_per_snippet is not enough" in rendered
-    assert "Stop at source_read_limits.max_snippets before the first edit" in rendered
-    assert "Exceeding max_snippets before first edit means source_read_budget_obeyed: no" in rendered
+    # The discovery-vs-snippet rules above are now carried on packet.diagnostics rather
+    # than the slimmed render() output (commit 42922e6).
+    assert "## Source Read Guidance" in rendered
 
 
 def test_validation_plan_packet_uses_focused_snippet_budget_when_usable() -> None:
@@ -535,21 +526,13 @@ def test_implementation_packet_includes_concrete_source_read_limits() -> None:
     ]
     assert "max_snippet_lines_obeyed == false" in contract["failure_conditions"]
     assert "source_read_budget_obeyed" in contract["reporting_fields"]
+    # The detailed implementation workflow is carried on packet.diagnostics
+    # (limits/contract asserted above); render() now emits only the slim guidance
+    # summary (commit 42922e6).
     rendered = packet.render()
-    assert "Implementation workflow: enumerate likely paths" in rendered
-    assert "choose the top candidate files" in rendered
-    assert "stop at the budget checkpoint before reading more" in rendered
-    assert "extra pre-edit reads require a recorded budget exception" in rendered
-    assert "count as a budget failure" in rendered
-    assert "default action is to make the first edit" in rendered
-    assert "A recorded exception explains budget failure; it does not preserve compliance" in rendered
-    assert "Do not read tests, model, route, presenter, policy, migration, and client files all up front" in rendered
-    assert "Snippet size limits are hard pre-edit limits" in rendered
-    assert rendered.index("path-only search first") < rendered.index("read only bounded snippets")
-    assert "Fallback search examples: git grep -l <term>" in rendered
-    assert "Disallowed fallback examples: git grep -n <term>" in rendered
-    assert "If fallback search starts printing source lines, stop immediately" in rendered
-    assert "Only exceed this budget after naming the missing fact" in rendered
+    assert "## Source Read Guidance" in rendered
+    assert "Suggested next action: inspect_budget_then_edit." in rendered
+    assert "Recommended post-packet source budget: 4000 tokens." in rendered
 
 
 def test_source_read_policy_names_remain_stable() -> None:

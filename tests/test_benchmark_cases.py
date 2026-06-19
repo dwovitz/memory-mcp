@@ -305,8 +305,9 @@ def test_context_packet_benchmark_case(case: dict[str, Any]) -> None:
     assert diagnostics["source_read_limits"]["source_read_budget_tokens"] == diagnostics["source_read_budget_tokens"]
     assert diagnostics["source_read_limits"]["broad_read_disallowed"] is True
     assert packet.token_reduction_percent >= expected["min_token_reduction_percent"]
+    # render() now emits only the slim 3-line guidance summary (commit 42922e6); the
+    # full limits/contract are asserted above via packet.diagnostics.
     assert "## Source Read Guidance" in packet.render()
-    assert "Source read limits:" in packet.render()
 
     for snippet in expected.get("facts_include", []):
         assert snippet in rendered_facts
@@ -323,4 +324,3 @@ def test_context_packet_benchmark_case(case: dict[str, Any]) -> None:
         assert diagnostics["source_read_limits"]["max_snippets"] == 10
     if "fallback_accepted" in expected:
         assert any(attempt["accepted"] is expected["fallback_accepted"] for attempt in diagnostics["fallback_attempts"])
-        assert "If fast search such as rg is unavailable" in packet.render()
