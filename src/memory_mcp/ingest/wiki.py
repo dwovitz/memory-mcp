@@ -47,13 +47,15 @@ def _sha256(text: str) -> str:
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
-def _ingest_key(collection: str, source_path: str, section: str) -> str:
+def _ingest_key(collection: str, rel_path: str, section: str) -> str:
     """Stable identifier for one derived record within a collection.
 
     Including the collection prevents cross-collection key collisions so the
     stale sweep for one wiki never archives records projected from another.
+    ``rel_path`` must be the root-relative POSIX path so the key stays stable
+    when the same wiki is re-ingested from a different OS or mount point.
     """
-    raw = f"{collection}::{source_path}::{section}"
+    raw = f"{collection}::{rel_path}::{section}"
     return _sha256(raw)[:32]
 
 
@@ -152,12 +154,17 @@ def build_wiki_records(
     source_file_hash = _sha256(file_text)
     source_modified_time = _isoformat(path.stat().st_mtime)
     ingestion_time = datetime.now(timezone.utc).isoformat()
-    rel_path = source_path
+    # Key projections on the root-relative POSIX path so re-runs are idempotent
+    # across operating systems. An absolute, OS-native path embeds the drive
+    # prefix and separator style (``D:\...\a.md`` vs ``/d/.../a.md``), so keying
+    # on it makes every record look new when the same wiki is re-ingested from a
+    # different platform — archiving the prior set and recreating it wholesale.
+    rel_path = path.as_posix()
     if root is not None:
         try:
-            rel_path = str(path.relative_to(Path(root)))
+            rel_path = path.relative_to(Path(root)).as_posix()
         except ValueError:
-            rel_path = source_path
+            rel_path = path.as_posix()
 
     records: list[dict[str, Any]] = []
     for section in parse_markdown_headings(path):
@@ -168,7 +175,7 @@ def build_wiki_records(
         else:
             content = f"{'#' * section.level} {section.heading}"
         content_hash = _sha256(content)
-        ingest_key = _ingest_key(collection, source_path, section_label)
+        ingest_key = _ingest_key(collection, rel_path, section_label)
         records.append(
             {
                 "content": content,

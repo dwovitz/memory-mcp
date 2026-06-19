@@ -162,6 +162,32 @@ def test_collection_changes_ingest_key(tmp_path: Path) -> None:
     assert a[0]["metadata"]["ingest_key"] != b[0]["metadata"]["ingest_key"]
 
 
+def test_ingest_key_is_relative_and_posix_for_cross_platform_stability(
+    tmp_path: Path,
+) -> None:
+    # The same relative file under two different roots (e.g. a Windows mount and
+    # the matching WSL path) must share an ingest key and a POSIX ``path`` so a
+    # re-ingest from another OS supersedes in place instead of archiving the old
+    # set and recreating it wholesale.
+    text = "# T\n\nBody.\n"
+    root_a = tmp_path / "machine_a" / "wiki"
+    root_b = tmp_path / "machine_b" / "wiki"
+    for root in (root_a, root_b):
+        (root / "sub").mkdir(parents=True)
+        (root / "sub" / "a.md").write_text(text, encoding="utf-8")
+
+    rec_a = build_wiki_records(
+        root_a / "sub" / "a.md", collection="wiki", scope={}, root=root_a
+    )
+    rec_b = build_wiki_records(
+        root_b / "sub" / "a.md", collection="wiki", scope={}, root=root_b
+    )
+
+    assert rec_a[0]["metadata"]["source"]["path"] == "sub/a.md"
+    assert "\\" not in rec_a[0]["metadata"]["source"]["path"]
+    assert rec_a[0]["metadata"]["ingest_key"] == rec_b[0]["metadata"]["ingest_key"]
+
+
 # ---------------------------------------------------------------------------
 # WikiIngestService — idempotency / reindex / stale sweep
 # ---------------------------------------------------------------------------
