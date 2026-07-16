@@ -39,6 +39,19 @@ This repo does not own:
 | Entity graph | Structured entities and relationships where applicable. |
 | Docker/runtime | Local or server-capable deployment and persistence. |
 
+## Current Component Map
+
+| Component | Primary paths | Boundary to preserve |
+|---|---|---|
+| MCP interface | `src/memory_mcp/mcp_tools/server.py`, `src/memory_mcp/main.py` | Tool inputs/outputs remain bounded; server-side policy remains authoritative. |
+| Auth and grants | `src/memory_mcp/auth/` | Trusted local and authenticated remote modes must remain explicit; clients do not grant themselves capabilities. |
+| Storage lifecycle | `src/memory_mcp/models/`, `src/memory_mcp/repositories/`, `migrations/` | PostgreSQL schema evolution is migration-backed; provenance and lifecycle state must survive changes. |
+| Retrieval/context | `src/memory_mcp/retrieval/`, `src/memory_mcp/services/context_synthesis.py` | Packets are bounded, scope-aware, sensitivity-filtered orientation—not unbounded source dumps. |
+| Ingestion/projection | `src/memory_mcp/ingest/`, `scripts/ingest_wiki.py` | The file wiki is canonical; stored memory is a provenance-stamped projection. |
+| Auto-capture | `hooks/`, `src/memory_mcp/distiller/`, `src/memory_mcp/repositories/staging.py` | Raw observations are staged before governed promotion and must not block client hooks. |
+| Deployment | `Dockerfile`, `docker-compose.yml`, `.env.example` | PostgreSQL is the shared durable store; exposed modes require explicit security configuration. |
+| Validation | `tests/`, `pytest`, `mypy`, `scripts/ai_index_check.py` | Focused tests establish local behavior; full outer-harness gates still apply before publication. |
+
 ## AI Index Model
 
 AI-facing index files are part of the repo contract. They provide navigation and safety context before source edits, especially when connector search is unreliable.

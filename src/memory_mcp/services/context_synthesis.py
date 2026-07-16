@@ -965,7 +965,11 @@ def _source_read_limits(
     *,
     source_read_budget_tokens: int,
 ) -> dict[str, Any]:
-    limits = dict(SOURCE_READ_LIMITS_BY_POLICY.get(source_read_policy, SOURCE_READ_LIMITS_BY_POLICY["none"]))
+    limits: dict[str, Any] = dict(
+        SOURCE_READ_LIMITS_BY_POLICY.get(
+            source_read_policy, SOURCE_READ_LIMITS_BY_POLICY["none"]
+        )
+    )
     limits["source_read_budget_tokens"] = source_read_budget_tokens
     limits["degraded_search_guidance"] = DEGRADED_SEARCH_GUIDANCE
     limits["path_only_search_first"] = True

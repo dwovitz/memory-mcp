@@ -4,6 +4,26 @@ PostgreSQL + pgvector memory service with MCP interface. Provides durable projec
 
 memory-mcp is a **retrieval/projection service**, not an unchecked runtime assistant. Every agent working in this repository must satisfy the issue readiness contract before beginning implementation.
 
+## AI Index Startup And Closeout
+
+Before broad exploration, read repository context in this order:
+
+1. `AGENTS.md`
+2. `AI_INDEX.md`
+3. `AI_ARCHITECTURE.md`
+4. the active GitHub issue and any tool-specific instructions
+5. memory/context and code-review-graph tools
+6. only the narrow source paths identified by that context
+
+`AI_INDEX.md` is a navigation map, not a replacement for source verification.
+Use `python scripts/ai_index_check.py --base origin/main` before closeout when
+a branch changes MCP contracts, storage, retrieval, scopes, safety, Docker,
+major entrypoints, or generated-index boundaries. Refresh only the
+automation-owned region with `python scripts/ai_index_refresh.py`.
+
+Every closeout must state whether the AI index was reviewed, which index files
+changed, and why no update was needed when the check does not require one.
+
 ## Issue Readiness — Execution Contract
 
 Full contract: `.memory-mcp/issue-contract.md`

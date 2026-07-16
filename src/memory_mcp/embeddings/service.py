@@ -43,6 +43,15 @@ class EmbeddingService:
     # Public API
     # ------------------------------------------------------------------
 
+    @property
+    def provider(self) -> EmbeddingProvider:
+        """Expose the query-embedding provider without exposing service state."""
+        return self._provider
+
+    def embed_texts(self, texts: list[str]) -> list[list[float]]:
+        """Embed query text without persisting it as a memory embedding."""
+        return self._provider.embed_texts(texts)
+
     def embed_and_store(self, memory_id: UUID, content: str) -> None:
         """Compute embedding for *content* and write it to the DB row."""
         embedding = self._get_embedding(content)

@@ -43,6 +43,31 @@ Use code-review-graph MCP tools before grep or broad file reads when available.
 | Tests | Validation for memory behavior, storage, retrieval, and APIs. |
 | Docker files | Local/server runtime and persistence setup. |
 
+<!-- AI-GENERATED:START repo-map -->
+## Generated Repository Map
+
+| Path | Responsibility |
+|---|---|
+| `.memory-mcp/` | Issue readiness and outer-harness execution contracts. |
+| `src/memory_mcp/` | Service package: MCP, persistence, retrieval, authorization, ingestion, and lifecycle features. |
+| `src/memory_mcp/mcp_tools/` | MCP server and public tool definitions. |
+| `src/memory_mcp/auth/` | Trusted-local and remote principal, grant, OIDC, and proxy controls. |
+| `src/memory_mcp/ingest/` | Markdown/wiki parsing, provenance-aware writing, and graph projection. |
+| `src/memory_mcp/retrieval/` | Hybrid retrieval and relationship-aware projection. |
+| `src/memory_mcp/distiller/` | Staged-observation distillation service and worker runner. |
+| `src/memory_mcp/models/` | SQLAlchemy schema and shared persistence types. |
+| `src/memory_mcp/repositories/` | Database repositories for memories, entities, relationships, audit, and staging. |
+| `migrations/` | Alembic migration environment and ordered schema revisions. |
+| `hooks/` | Client-side capture hooks; they must remain bounded and non-blocking. |
+| `scripts/` | Operator utilities, ingestion/backfill helpers, and AI-index commands. |
+| `tests/` | Pytest coverage grouped by service capability and integration boundary. |
+| `docs/` | Canonical operator, architecture, ingestion, retrieval, and workflow documentation. |
+| `client-setups/` | Thin, client-specific connection/setup examples. |
+| `benchmarks/` | Repeatable context-reduction benchmark cases and results. |
+| `docker-compose.yml` | Postgres, MCP gateway, and background-distiller development topology. |
+| `pyproject.toml` | Python packaging, runtime dependencies, and pytest configuration. |
+<!-- AI-GENERATED:END repo-map -->
+
 ## Critical Concepts
 
 - Memory is a durable context layer for multiple harnesses, not a provider-specific feature.
@@ -52,6 +77,18 @@ Use code-review-graph MCP tools before grep or broad file reads when available.
 - Memory should store compact facts, decisions, rules, commands, constraints, and project context — not raw transcripts, secrets, or sensitive data.
 - Use the smallest meaningful validation loop for the change; do not default to expensive full-repo validation when a targeted check proves the contract.
 - AI index updates are part of story closeout when navigation, commands, contracts, architecture, MCP behavior, storage/retrieval behavior, or generated-file boundaries change.
+
+## Starting Paths By Change Type
+
+| Change | Start here | Focused validation |
+|---|---|---|
+| MCP contract or transport | `src/memory_mcp/mcp_tools/server.py`, `src/memory_mcp/main.py`, `tests/test_mcp_tools.py` | `pytest tests/test_mcp_tools.py -x -q` |
+| Retrieval or context packet | `src/memory_mcp/retrieval/`, `src/memory_mcp/services/context_synthesis.py`, `docs/retrieval.md` | retrieval/context tests plus source-read-policy coverage |
+| Memory schema or lifecycle | `src/memory_mcp/models/`, `src/memory_mcp/repositories/`, `migrations/` | model/repository/migration tests |
+| Authentication or sensitivity | `src/memory_mcp/auth/`, `src/memory_mcp/mcp_tools/server.py` | auth-policy and MCP tests |
+| Wiki/markdown ingestion | `src/memory_mcp/ingest/`, `docs/wiki_ingestion.md` | ingestion test package |
+| Auto-capture/distillation | `hooks/`, `src/memory_mcp/distiller/`, `src/memory_mcp/repositories/staging.py`, `docs/auto_capture.md` | hook, staging, and distiller tests |
+| Runtime/deployment | `Dockerfile`, `docker-compose.yml`, `.env.example`, `README.md` | compose configuration and relevant runtime probe |
 
 ## Do Not Break
 
@@ -89,3 +126,16 @@ Update this file when a change modifies:
 - generated-file boundaries.
 
 See `docs/ai-indexing.md` for maintenance rules.
+
+## Machine-Readable Index Commands
+
+- `python scripts/ai_index_check.py --base origin/main` verifies required files,
+  generated-region freshness, and whether architecture-sensitive diffs include
+  an index review.
+- `python scripts/ai_index_refresh.py` refreshes only the marked generated
+  region in this file and `.ai/index.json`.
+
+The checker intentionally treats `AGENTS.md`, `AI_INDEX.md`,
+`AI_ARCHITECTURE.md`, `docs/ai-indexing.md`, and `.ai/index.json` as index
+review evidence. It does not infer that generated prose is a replacement for
+the human-authored safety and architecture sections around the generated map.
