@@ -7,7 +7,6 @@ from datetime import datetime
 from decimal import Decimal
 import json
 import os
-import re
 from pathlib import Path
 from typing import Any, Literal, cast, overload
 from uuid import UUID
@@ -70,6 +69,7 @@ VALID_MEMORY_SCOPES = {
 MAX_TEXT_CHARS = 20_000
 MAX_SUMMARY_CHARS = 2_000
 MAX_JSON_CHARS = 20_000
+MAX_OBSERVATION_PAYLOAD_CHARS = 6_000
 MAX_TAGS = 25
 MAX_TAG_CHARS = 100
 MAX_SEARCH_LIMIT = 50
@@ -80,13 +80,11 @@ MAX_SCOPE_PATH_PARTS = 32
 MAX_SCOPE_PATH_PART_CHARS = 200
 MUTATION_TOOLS_ENV = "MEMORY_MCP_ENABLE_MUTATION_TOOLS"
 SENSITIVE_TOOLS_ENV = "MEMORY_MCP_ENABLE_SENSITIVE_TOOLS"
-
-_SECRET_PATTERNS: tuple[re.Pattern[str], ...] = (
-    re.compile(r"(AKIA|AGPA|AIDA|AROA|ASCA|ASIA)[0-9A-Z]{16}"),
-    re.compile(r"-----BEGIN .{0,20}PRIVATE KEY-----"),
-    re.compile(r"[Bb]earer\s+[A-Za-z0-9\-._~+/]{20,}={0,3}"),
-    re.compile(r"AccountKey=[A-Za-z0-9+/]{20,}={0,2}"),
+VALID_OBSERVATION_SOURCES = frozenset(
+    {"post_tool_use", "user_prompt_submit", "session_start", "session_end"}
 )
+from memory_mcp.safety import check_content_for_secrets
+
 CACHE_NAMESPACE = "memory-data"
 CACHE_SOURCE_TABLES = (
     ("entities", Entity),
@@ -1208,6 +1206,26 @@ def enqueue_observation(
     Called by Claude Code hooks. Returns immediately; the distiller worker
     promotes raw observations into typed memories asynchronously.
     """
+    _require_mutation_tools_enabled()
+    source = _validate_text("source", source, max_chars=100, required=True)
+    if source not in VALID_OBSERVATION_SOURCES:
+        raise ValueError(f"unsupported observation source: {source}")
+    payload = _validate_json_payload(
+        "payload", payload, max_chars=MAX_OBSERVATION_PAYLOAD_CHARS
+    )
+    if not isinstance(payload, dict):
+        raise ValueError("payload must be a JSON object")
+    _check_content_for_secrets(json.dumps(payload, default=str, sort_keys=True))
+    workspace = _validate_text("workspace", workspace, max_chars=200)
+    project = _validate_text("project", project, max_chars=200)
+    repo = _validate_text("repo", repo, max_chars=200)
+    component = _validate_text("component", component, max_chars=200)
+    _authorize_tool_call(
+        "enqueue_observation",
+        AuthAction.WRITE,
+        workspace=workspace,
+        project=project or repo,
+    )
     scope = {k: v for k, v in {
         "workspace": workspace,
         "project": project,
@@ -1222,16 +1240,42 @@ def enqueue_observation(
 
 
 @mcp.tool()
-def get_memory_by_id(memory_id: str) -> dict[str, Any]:
+def get_memory_by_id(memory_id: str, include_sensitive: bool = False) -> dict[str, Any]:
     """Fetch a single memory by UUID for citation/dereferencing.
 
     Returns content, scope, type, confidence, and tags. Used by clients
     that received a memory id in a context packet and want full detail.
+    Private and sensitive memories require an explicitly authorized request.
     """
+    parsed_memory_id = _parse_required_uuid(memory_id, "memory_id")
     with session_scope() as s:
-        m = s.get(Memory, UUID(memory_id))
+        m = s.get(Memory, parsed_memory_id)
         if m is None or m.status != "active":
             return {"error": "not_found", "id": memory_id}
+        scope = m.applies_to or {}
+        workspace = scope.get("workspace") if isinstance(scope.get("workspace"), str) else None
+        project = scope.get("project") if isinstance(scope.get("project"), str) else None
+        repo = scope.get("repo") if isinstance(scope.get("repo"), str) else None
+        component = scope.get("component") if isinstance(scope.get("component"), str) else None
+        _authorize_tool_call(
+            "get_memory_by_id",
+            AuthAction.READ,
+            workspace=workspace,
+            project=project or repo,
+            component=component,
+        )
+        if m.sensitivity != "normal":
+            if not include_sensitive:
+                return {"error": "not_found", "id": memory_id}
+            _authorize_tool_call(
+                "get_memory_by_id",
+                AuthAction.SENSITIVE_READ,
+                workspace=workspace,
+                project=project or repo,
+                component=component,
+                requested_sensitivity=m.sensitivity,
+            )
+            _allowed_sensitivities(True)
         tags = list(
             s.scalars(
                 select(MemoryTag.tag).where(
@@ -1414,12 +1458,7 @@ def _entity_result_to_dict(result: EntitySearchResult) -> dict[str, Any]:
 
 
 def _check_content_for_secrets(content: str) -> None:
-    for pattern in _SECRET_PATTERNS:
-        if pattern.search(content):
-            raise ValueError(
-                "content appears to contain a secret or credential. "
-                "Secrets must not be stored as memories."
-            )
+    check_content_for_secrets(content)
 
 
 _MAX_CITATIONS = 20

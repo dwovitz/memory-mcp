@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from contextlib import contextmanager
 from datetime import datetime, timezone
 from decimal import Decimal
 from pathlib import Path
@@ -17,6 +18,7 @@ from memory_mcp.mcp_tools.server import (
     DEFAULT_SENSITIVITIES,
     MUTATION_TOOLS_ENV,
     MAX_SEARCH_LIMIT,
+    MAX_OBSERVATION_PAYLOAD_CHARS,
     SENSITIVE_TOOLS_ENV,
     _allowed_sensitivities,
     _bounded_int,
@@ -30,6 +32,8 @@ from memory_mcp.mcp_tools.server import (
     _validate_memory_scope,
     _validate_scope_path,
     _validate_uuid_list,
+    enqueue_observation,
+    get_memory_by_id,
 )
 from memory_mcp.models import Memory
 from memory_mcp.services import ContextPacket, RequestClassification
@@ -54,6 +58,122 @@ def _test_cache_state() -> dict:
 @pytest.fixture(autouse=True)
 def stable_cache_state(monkeypatch) -> None:
     monkeypatch.setattr(server_module, "_cache_state_from_session", lambda session: _test_cache_state())
+
+
+def test_enqueue_observation_requires_mutation_flag(monkeypatch) -> None:
+    monkeypatch.delenv(MUTATION_TOOLS_ENV, raising=False)
+
+    with pytest.raises(PermissionError, match="Mutation MCP tools are disabled"):
+        enqueue_observation("post_tool_use", {"tool": "Read"})
+
+
+def test_enqueue_observation_validates_source_payload_and_secrets(monkeypatch) -> None:
+    monkeypatch.setenv(MUTATION_TOOLS_ENV, "true")
+
+    with pytest.raises(ValueError, match="unsupported observation source"):
+        enqueue_observation("unknown", {})
+    with pytest.raises(ValueError, match="JSON payload"):
+        enqueue_observation("post_tool_use", {"text": "x" * MAX_OBSERVATION_PAYLOAD_CHARS})
+    with pytest.raises(ValueError, match="secret or credential"):
+        enqueue_observation("post_tool_use", {"token": "Bearer " + "x" * 24})
+
+
+def test_enqueue_observation_authorizes_and_persists_bounded_event(monkeypatch) -> None:
+    monkeypatch.setenv(MUTATION_TOOLS_ENV, "true")
+    authorized: dict[str, object] = {}
+    enqueued: dict[str, object] = {}
+
+    def fake_authorize(*args, **kwargs) -> None:
+        authorized["args"] = args
+        authorized["kwargs"] = kwargs
+
+    class FakeSession:
+        def commit(self) -> None:
+            return None
+
+    class FakeRepository:
+        def __init__(self, session) -> None:
+            assert isinstance(session, FakeSession)
+
+        def enqueue(self, **kwargs):
+            enqueued.update(kwargs)
+            return uuid4()
+
+    @contextmanager
+    def fake_session_scope():
+        yield FakeSession()
+
+    monkeypatch.setattr(server_module, "_authorize_tool_call", fake_authorize)
+    monkeypatch.setattr(server_module, "StagingRepository", FakeRepository)
+    monkeypatch.setattr(server_module, "session_scope", fake_session_scope)
+
+    result = enqueue_observation(
+        "post_tool_use",
+        {"tool": "Read"},
+        workspace="ai",
+        repo="memory-mcp",
+    )
+
+    assert result["observation_id"]
+    assert authorized["args"] == ("enqueue_observation", server_module.AuthAction.WRITE)
+    assert authorized["kwargs"] == {"workspace": "ai", "project": "memory-mcp"}
+    assert enqueued == {
+        "source": "post_tool_use",
+        "payload": {"tool": "Read"},
+        "scope": {"workspace": "ai", "repo": "memory-mcp"},
+    }
+
+
+def test_get_memory_by_id_hides_private_memory_without_sensitive_access(monkeypatch) -> None:
+    memory = Memory(
+        id=uuid4(),
+        memory_type="project_fact",
+        content="Private auto-captured claim.",
+        sensitivity="private",
+        status="active",
+        applies_to={"workspace": "ai", "repo": "memory-mcp"},
+    )
+    authorized: list[tuple[tuple[object, ...], dict[str, object]]] = []
+
+    class FakeSession:
+        def get(self, model, memory_id):
+            assert model is Memory
+            assert memory_id == memory.id
+            return memory
+
+        def scalars(self, statement):
+            return []
+
+    @contextmanager
+    def fake_session_scope():
+        yield FakeSession()
+
+    def fake_authorize(*args, **kwargs) -> None:
+        authorized.append((args, kwargs))
+
+    monkeypatch.setattr(server_module, "session_scope", fake_session_scope)
+    monkeypatch.setattr(server_module, "_authorize_tool_call", fake_authorize)
+    monkeypatch.delenv(SENSITIVE_TOOLS_ENV, raising=False)
+
+    hidden = get_memory_by_id(str(memory.id))
+
+    assert hidden == {"error": "not_found", "id": str(memory.id)}
+    assert authorized == [
+        (
+            ("get_memory_by_id", server_module.AuthAction.READ),
+            {"workspace": "ai", "project": "memory-mcp", "component": None},
+        )
+    ]
+
+    monkeypatch.setenv(SENSITIVE_TOOLS_ENV, "true")
+    shown = get_memory_by_id(str(memory.id), include_sensitive=True)
+
+    assert shown["content"] == "Private auto-captured claim."
+    assert [args for args, _ in authorized[-2:]] == [
+        ("get_memory_by_id", server_module.AuthAction.READ),
+        ("get_memory_by_id", server_module.AuthAction.SENSITIVE_READ),
+    ]
+    assert all(kwargs["project"] == "memory-mcp" for _, kwargs in authorized)
 
 
 def test_memory_to_dict_is_json_safe_and_can_include_evidence() -> None:

@@ -18,6 +18,8 @@ JSON object with these fields:
   - tags: array of short kebab-case tags.
   - applies_to: object with workspace/project/repo/component (use only the
     fields present in the input scope; omit unknown layers).
+  - observation_ids: non-empty array of the input observation_id values that
+    directly support this claim. Do not include unrelated observations.
   - ingest_key: a deterministic short string derived from content+scope so
     re-runs dedupe (e.g. "distill:<sha8 of content>").
 

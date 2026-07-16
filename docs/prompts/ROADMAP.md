@@ -19,8 +19,8 @@ Check docs/prompts/ROADMAP.md for current status before starting.
 | # | Track | Prompt file | Branch | Model | Effort | Status |
 |---|---|---|---|---|---|---|
 | 0 | Branch cleanup + scaffold | *(this session)* | main | — | 15 min | ✅ |
-| 1 | Auto-capture + distillation | [impl-auto-capture.md](impl-auto-capture.md) | `feat/auto-capture-distillation` | Sonnet | 1–2 days | ✅ |
-| 1R | Verify/repair auto-capture + distillation | [impl-track-1r-auto-capture-verification.md](impl-track-1r-auto-capture-verification.md) | `fix/track-1-auto-capture-verification` | Sonnet | 1–3 hrs / 1 day if repair required | ✅ |
+| 1 | Auto-capture + distillation | [impl-auto-capture.md](impl-auto-capture.md) | `feat/auto-capture-distillation` | Sonnet | 1–2 days | ✅ — verified in [#3](https://github.com/dwovitz/memory-mcp/issues/3) |
+| 1R | Verify/repair auto-capture + distillation | [impl-track-1r-auto-capture-verification.md](impl-track-1r-auto-capture-verification.md) | `fix/track-1-auto-capture-verification` | Sonnet | 1–3 hrs / 1 day if repair required | ✅ — repairs tracked in [#3](https://github.com/dwovitz/memory-mcp/issues/3) |
 | 2 | Verify / complete semantic retrieval | [impl-semantic-retrieval.md](impl-semantic-retrieval.md) | `feat/p0-semantic-retrieval` | Sonnet | 2–4 hrs | ✅ |
 | 3 | QW1 markdown ingest script | [impl-qw1-markdown-ingest.md](impl-qw1-markdown-ingest.md) | `feat/qw1-markdown-ingest` | Sonnet | 2–4 hrs | ✅ |
 | 4 | P1 entity graph MCP tools | [impl-p1-entity-graph.md](impl-p1-entity-graph.md) | `feat/p1-entity-graph` | Sonnet | 4–8 hrs | ✅ |

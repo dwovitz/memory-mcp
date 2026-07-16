@@ -7,6 +7,13 @@ import sys
 from hooks._client import enqueue
 
 
+def _truncate_summary(value: object, *, max_chars: int = 4000) -> object:
+    text = json.dumps(value, default=str)
+    if len(text) > max_chars:
+        return text[:max_chars] + "...<truncated>"
+    return value
+
+
 def _scope() -> dict:
     return {
         k: v for k, v in {
@@ -25,7 +32,7 @@ def main() -> int:
         event = {}
     enqueue(source="session_end",
             payload={"session_id": event.get("session_id"),
-                     "summary": event.get("summary")},
+                     "summary": _truncate_summary(event.get("summary"))},
             scope=_scope())
     return 0
 
