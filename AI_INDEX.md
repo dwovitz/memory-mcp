@@ -88,6 +88,7 @@ Use code-review-graph MCP tools before grep or broad file reads when available.
 | Authentication or sensitivity | `src/memory_mcp/auth/`, `src/memory_mcp/mcp_tools/server.py` | auth-policy and MCP tests |
 | Wiki/markdown ingestion | `src/memory_mcp/ingest/`, `docs/wiki_ingestion.md` | ingestion test package |
 | Auto-capture/distillation | `hooks/`, `src/memory_mcp/distiller/`, `src/memory_mcp/repositories/staging.py`, `docs/auto_capture.md` | hook, staging, and distiller tests |
+| Conversation evidence design | `docs/conversation_ingestion.md`, `docs/auto_capture.md`, `docs/ARCHITECTURE.md` | documentation link/contract review; do not add runtime storage in the design slice |
 | Runtime/deployment | `Dockerfile`, `docker-compose.yml`, `.env.example`, `README.md` | compose configuration and relevant runtime probe |
 
 ## Do Not Break

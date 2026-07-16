@@ -337,7 +337,12 @@ Lifecycle rules:
 `memory-mcp` can seed memory from external sources. Two ingestion paths exist:
 
 - **Auto-capture** — hook-driven session events distilled into typed memories
-  (see [auto_capture.md](auto_capture.md)).
+  (see [auto_capture.md](auto_capture.md)). These are staged observations, not
+  automatically canonical conversation archives.
+- **Conversation evidence** — the transcript-ingestion contract separates
+  episodic archive evidence, reviewable extraction proposals, semantic memory,
+  compiled views, and audit lineage (see
+  [conversation_ingestion.md](conversation_ingestion.md)).
 - **Wiki ingestion** — a local file-based wiki treated as the *canonical*
   source of private knowledge. `memory-mcp` stores derived **projections** of
   each Markdown section, stamped with provenance (`metadata.source`: path,

@@ -14,6 +14,9 @@ large files.
 - [Wiki Ingestion](wiki_ingestion.md) explains indexing a canonical local wiki
   as provenance-stamped, private-by-default projections with deterministic
   reindex and stale-projection archival.
+- [Conversation Ingestion](conversation_ingestion.md) defines the evidence,
+  review, provenance, sensitivity, and retrieval contract for future transcript
+  imports.
 - [Backlog](BACKLOG.md) indexes the current GitHub-backed memory safety and
   compiled-view backlog direction.
 - [Agent Workflow](AGENT_WORKFLOW.md) explains how agents should retrieve,
