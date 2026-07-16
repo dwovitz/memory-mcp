@@ -9,7 +9,7 @@ import json
 import os
 import re
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal, cast, overload
 from uuid import UUID
 
 from dotenv import load_dotenv
@@ -1230,15 +1230,23 @@ def get_memory_by_id(memory_id: str) -> dict[str, Any]:
     """
     with session_scope() as s:
         m = s.get(Memory, UUID(memory_id))
-        if m is None or m.archived_at is not None:
+        if m is None or m.status != "active":
             return {"error": "not_found", "id": memory_id}
+        tags = list(
+            s.scalars(
+                select(MemoryTag.tag).where(
+                    MemoryTag.memory_id == m.id,
+                    MemoryTag.status == "active",
+                )
+            )
+        )
         return {
             "id": str(m.id),
             "content": m.content,
             "type": m.memory_type,
             "scope": m.applies_to,
             "confidence": float(m.confidence) if m.confidence is not None else None,
-            "tags": [t.tag for t in m.tags],
+            "tags": tags,
         }
 
 
@@ -1250,7 +1258,9 @@ def run(transport: str = "stdio", host: str = "0.0.0.0", port: int = 3000) -> No
         mcp.settings.host = host
         mcp.settings.port = port
         mcp.settings.stateless_http = True
-        mcp.run(transport=transport)
+        mcp.run(
+            transport=cast(Literal["stdio", "sse", "streamable-http"], transport)
+        )
 
 
 def _cache_state_from_session(session: Any) -> dict[str, Any]:
@@ -1307,7 +1317,7 @@ def _memory_result_to_dict(result: MemorySearchResult, *, include_evidence: bool
 
 
 def _memory_to_dict(memory: Memory, *, include_evidence: bool = False) -> dict[str, Any]:
-    data = {
+    data: dict[str, Any] = {
         "id": str(memory.id),
         "entity_id": str(memory.entity_id) if memory.entity_id else None,
         "memory_type": memory.memory_type,
@@ -1333,7 +1343,7 @@ def _memory_write_to_dict(
     include_content: bool = False,
     include_evidence: bool = False,
 ) -> dict[str, Any]:
-    data = {
+    data: dict[str, Any] = {
         "id": str(memory.id),
         "entity_id": str(memory.entity_id) if memory.entity_id else None,
         "memory_type": memory.memory_type,
@@ -1545,6 +1555,26 @@ def _bounded_int(name: str, value: int, *, minimum: int, maximum: int) -> int:
     if value < minimum or value > maximum:
         raise ValueError(f"{name} must be between {minimum} and {maximum}")
     return value
+
+
+@overload
+def _validate_text(
+    name: str,
+    value: str,
+    *,
+    max_chars: int,
+    required: Literal[True],
+) -> str: ...
+
+
+@overload
+def _validate_text(
+    name: str,
+    value: str | None,
+    *,
+    max_chars: int,
+    required: Literal[False] = False,
+) -> str | None: ...
 
 
 def _validate_text(

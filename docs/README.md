@@ -18,6 +18,8 @@ large files.
   compiled-view backlog direction.
 - [Agent Workflow](AGENT_WORKFLOW.md) explains how agents should retrieve,
   apply, and refresh context during real coding work.
+- [AI Indexing](ai-indexing.md) defines the navigation-index contract and its
+  deterministic maintenance commands.
 - [Benchmarks](../benchmarks/README.md) define task-oriented benchmark cases
   for feature work, bug fixing, and validation planning.
 - [Client Setup](../CLIENT_SETUP_README.md) explains how to connect Cursor,

@@ -1,0 +1,29 @@
+{
+  "schema_version": 1,
+  "generated_regions": [
+    "repo-map"
+  ],
+  "required_index_files": [
+    "AGENTS.md",
+    "AI_INDEX.md",
+    "AI_ARCHITECTURE.md",
+    "docs/ai-indexing.md"
+  ],
+  "review_evidence_files": [
+    "AGENTS.md",
+    "AI_INDEX.md",
+    "AI_ARCHITECTURE.md",
+    "docs/ai-indexing.md",
+    ".ai/index.json"
+  ],
+  "sensitive_change_prefixes": [
+    "src/memory_mcp/",
+    "hooks/",
+    "migrations/"
+  ],
+  "sensitive_change_files": [
+    "Dockerfile",
+    "docker-compose.yml",
+    "pyproject.toml"
+  ]
+}

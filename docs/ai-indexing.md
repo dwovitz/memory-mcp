@@ -96,6 +96,28 @@ Automation should assist maintenance, not overwrite intent.
 - Human-authored intent, boundaries, and safety rules must not be blindly regenerated.
 - Any generated update should be reviewable in a normal diff.
 
+## Commands
+
+Run these commands from the repository root:
+
+```powershell
+python scripts/ai_index_refresh.py
+python scripts/ai_index_check.py --base origin/main
+```
+
+`ai_index_refresh.py` rewrites only the `repo-map` region bounded by
+`AI-GENERATED:START` and `AI-GENERATED:END` in `AI_INDEX.md`, and rewrites the
+automation-owned `.ai/index.json`. It never edits the surrounding purpose,
+architecture, ownership, safety, or validation prose.
+
+`ai_index_check.py` verifies required index files, the JSON shape, and that the
+generated region equals the repository map the refresh tool would produce. It
+also examines paths changed since `--base` (default: `origin/main`). Changes to
+MCP, storage, retrieval, authorization, ingestion, hooks, migrations, Docker,
+or package configuration require at least one maintained index file in the
+same diff. Use `--changed path/to/file` for a deterministic local or test-only
+check without consulting Git.
+
 ## Generated Regions
 
 Future automation should only rewrite generated regions marked like this:

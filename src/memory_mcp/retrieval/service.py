@@ -157,7 +157,11 @@ class HybridRetrievalService:
             for row in rows
         ]
 
-        if use_vector_rerank:
+        if (
+            use_vector_rerank
+            and self.embedding_service is not None
+            and text_query is not None
+        ):
             try:
                 q_emb: list[float] = self.embedding_service.provider.embed_texts([text_query])[0]
                 blended: list[tuple[float, MemorySearchResult]] = []

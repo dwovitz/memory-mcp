@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import builtins
 from collections.abc import Sequence
 from decimal import Decimal
 from typing import Any
@@ -100,7 +101,7 @@ class RelationshipRepository:
         status: str | Sequence[str] | None = None,
         limit: int = 100,
         offset: int = 0,
-    ) -> list[Relationship]:
+    ) -> builtins.list[Relationship]:
         statement = self.build_list_statement(
             source_entity_id=source_entity_id,
             target_entity_id=target_entity_id,
@@ -140,7 +141,7 @@ class RelationshipRepository:
         target_id: UUID,
         relationship_type: str,
         description: str | None = None,
-        evidence: list[Any] | None = None,
+        evidence: builtins.list[Any] | None = None,
         applies_to: dict[str, Any] | None = None,
     ) -> tuple["Relationship", str]:
         """Return (relationship, status) where status is 'created' or 'updated'."""
@@ -170,7 +171,7 @@ class RelationshipRepository:
         entity_id: UUID,
         relationship_types: tuple[str, ...] | None = None,
         direction: str = "both",
-    ) -> list["Relationship"]:
+    ) -> builtins.list["Relationship"]:
         """Return relationships where entity_id is source, target, or either."""
         q = self.session.query(Relationship).filter(Relationship.status == "active")
         if direction == "outbound":

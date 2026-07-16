@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import builtins
 from collections.abc import Sequence
 from decimal import Decimal
 from typing import Any
@@ -24,7 +25,7 @@ class EntityRepository:
         *,
         entity_type: str,
         name: str,
-        aliases: list[Any] | None = None,
+        aliases: builtins.list[Any] | None = None,
         attributes: dict[str, Any] | None = None,
         confidence: Decimal | str | float = Decimal("1.0"),
         sensitivity: str = "normal",
@@ -98,7 +99,7 @@ class EntityRepository:
         self,
         entity_type: str,
         name: str,
-        aliases: list[Any] | None = None,
+        aliases: builtins.list[Any] | None = None,
         attributes: dict[str, Any] | None = None,
         applies_to: dict[str, Any] | None = None,
     ) -> tuple["Entity", str]:
