@@ -362,6 +362,11 @@ Lifecycle rules:
 
 ## Safety Boundaries
 
+The [SafeMemoryContract](safe_memory_contract.md) classifies memory by trust
+and operational meaning. Retrieved text is advisory by default: only approved,
+versioned policy or workflow-rule records may constrain behavior, and they
+never grant a capability without server-side authorization.
+
 - The server is designed for trusted local stdio clients.
 - Hosted or shared transports must use `MEMORY_MCP_AUTH_MODE=remote`, which
   requires a normalized authenticated principal before MCP tool work runs.

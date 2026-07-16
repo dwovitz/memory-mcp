@@ -15,6 +15,7 @@ see [CLIENT_SETUP_README.md](CLIENT_SETUP_README.md).
 - [Documentation index](docs/README.md)
 - [Goals](docs/GOALS.md)
 - [Architecture](docs/ARCHITECTURE.md)
+- [SafeMemoryContract](docs/safe_memory_contract.md)
 - [Agent workflow](docs/AGENT_WORKFLOW.md)
 - [Benchmark cases](benchmarks/README.md)
 - **Auto-capture**: hook-driven session ingestion with bounded background

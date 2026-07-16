@@ -11,6 +11,8 @@ large files.
   roadmap.
 - [Architecture](ARCHITECTURE.md) explains the system shape, storage model,
   retrieval flow, lifecycle rules, and Mermaid diagrams.
+- [SafeMemoryContract](safe_memory_contract.md) defines the trust,
+  provenance, review, and executable-instruction boundary for durable memory.
 - [Wiki Ingestion](wiki_ingestion.md) explains indexing a canonical local wiki
   as provenance-stamped, private-by-default projections with deterministic
   reindex and stale-projection archival.
