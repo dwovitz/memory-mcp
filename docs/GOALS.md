@@ -69,6 +69,9 @@ Track these metrics as the project matures:
   the operator intentionally syncs or backs up the data.
 - **Safe by default**: sensitive and private data are excluded unless a trusted
   local request explicitly opts in.
+- **Trust-aware**: retrieved records are advisory unless their documented
+  class, provenance, review, freshness, and server-side authorization permit a
+  more specific use; see the [SafeMemoryContract](safe_memory_contract.md).
 
 ## Non-Goals
 
