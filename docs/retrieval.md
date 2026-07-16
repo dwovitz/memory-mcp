@@ -25,6 +25,14 @@ Entity and relationship projections are produced by deterministic, reviewable
 extraction only — see [wiki_ingestion.md](wiki_ingestion.md#graph-projection).
 No projection is created without provenance.
 
+## Durable compiled views
+
+A durable compiled view is a bounded, reusable orientation projection over
+source memories. It is distinct from a request-time context packet and remains
+derived rather than canonical. Views need foreign-key-backed source provenance,
+scope/sensitivity limits, lifecycle-aware invalidation, and explicit
+source-verification guidance. See [compiled_memory_views.md](compiled_memory_views.md).
+
 ## Combined retrieval
 
 `ProjectionRetrievalService.retrieve(...)` blends every available signal:

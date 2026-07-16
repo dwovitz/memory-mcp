@@ -13,6 +13,8 @@ large files.
   retrieval flow, lifecycle rules, and Mermaid diagrams.
 - [SafeMemoryContract](safe_memory_contract.md) defines the trust,
   provenance, review, and executable-instruction boundary for durable memory.
+- [Durable Compiled Memory Views](compiled_memory_views.md) defines reusable,
+  source-backed, invalidatable orientation summaries.
 - [Wiki Ingestion](wiki_ingestion.md) explains indexing a canonical local wiki
   as provenance-stamped, private-by-default projections with deterministic
   reindex and stale-projection archival.

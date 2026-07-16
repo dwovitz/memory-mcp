@@ -299,6 +299,10 @@ The packet includes:
 - Rendered-packet token estimate.
 - Reduction percentage.
 
+Durable compiled views are a future, invalidatable projection layer over these
+records. They must retain source-memory provenance and the SafeMemoryContract's
+trust/verification rules; see [compiled_memory_views.md](compiled_memory_views.md).
+
 Project packets are considered suspiciously weak when no project/component
 memories match, only inherited workspace/global facts match, or the rendered
 packet is unusually small. Component-scoped broad architecture, risk, security,
