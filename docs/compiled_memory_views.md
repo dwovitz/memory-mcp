@@ -142,5 +142,5 @@ must not treat a view as a shortcut around SafeMemoryContract controls.
   retrieval.
 - [Conversation ingestion](conversation_ingestion.md) defines stricter
   evidence, review, and invalidation requirements for transcript-derived views.
-- [Issue #7](https://github.com/dwovitz/memory-mcp/issues/7) will define how
-  context assembly renders views and verification diagnostics.
+- [Context assembly contract](context_assembly_contract.md) defines how packet
+  assembly renders views and their verification diagnostics.

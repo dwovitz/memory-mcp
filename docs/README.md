@@ -15,6 +15,8 @@ large files.
   provenance, review, and executable-instruction boundary for durable memory.
 - [Durable Compiled Memory Views](compiled_memory_views.md) defines reusable,
   source-backed, invalidatable orientation summaries.
+- [Context Assembly Contract](context_assembly_contract.md) defines the
+  bounded, provenance-aware packets agents use for planning and work.
 - [Wiki Ingestion](wiki_ingestion.md) explains indexing a canonical local wiki
   as provenance-stamped, private-by-default projections with deterministic
   reindex and stale-projection archival.
