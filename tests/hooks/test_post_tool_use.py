@@ -3,6 +3,7 @@ import json
 from unittest.mock import patch
 
 from hooks.post_tool_use import main
+from hooks.post_tool_use import _truncate_json
 
 
 def test_main_reads_stdin_event_and_enqueues(monkeypatch):
@@ -26,3 +27,11 @@ def test_main_reads_stdin_event_and_enqueues(monkeypatch):
     assert kwargs["source"] == "post_tool_use"
     assert kwargs["payload"]["tool"] == "Edit"
     assert kwargs["scope"]["project"] == "memory-mcp"
+
+
+def test_truncate_json_bounds_large_tool_input() -> None:
+    result = _truncate_json({"contents": "x" * 5000})
+
+    assert isinstance(result, str)
+    assert result.endswith("...<truncated>")
+    assert len(result) < 4_100

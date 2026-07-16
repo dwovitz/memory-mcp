@@ -48,7 +48,7 @@ This repo does not own:
 | Storage lifecycle | `src/memory_mcp/models/`, `src/memory_mcp/repositories/`, `migrations/` | PostgreSQL schema evolution is migration-backed; provenance and lifecycle state must survive changes. |
 | Retrieval/context | `src/memory_mcp/retrieval/`, `src/memory_mcp/services/context_synthesis.py` | Packets are bounded, scope-aware, sensitivity-filtered orientation—not unbounded source dumps. |
 | Ingestion/projection | `src/memory_mcp/ingest/`, `scripts/ingest_wiki.py` | The file wiki is canonical; stored memory is a provenance-stamped projection. |
-| Auto-capture | `hooks/`, `src/memory_mcp/distiller/`, `src/memory_mcp/repositories/staging.py` | Raw observations are staged before governed promotion and must not block client hooks. |
+| Auto-capture | `hooks/`, `src/memory_mcp/mcp_tools/server.py`, `src/memory_mcp/distiller/`, `src/memory_mcp/repositories/staging.py` | Enqueue is an authorized, bounded write; raw observations are staged before governed promotion and must not block client hooks. Promoted claims are private and retain server-validated, claim-specific staging provenance. |
 | Deployment | `Dockerfile`, `docker-compose.yml`, `.env.example` | PostgreSQL is the shared durable store; exposed modes require explicit security configuration. |
 | Validation | `tests/`, `pytest`, `mypy`, `scripts/ai_index_check.py` | Focused tests establish local behavior; full outer-harness gates still apply before publication. |
 

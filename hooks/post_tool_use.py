@@ -16,7 +16,7 @@ def main() -> int:
 
     payload = {
         "tool": event.get("tool_name"),
-        "input": event.get("tool_input"),
+        "input": _truncate_json(event.get("tool_input")),
         "response_summary": _summarize_response(event.get("tool_response")),
         "session_id": event.get("session_id"),
         "cwd": event.get("cwd"),
@@ -34,10 +34,14 @@ def main() -> int:
 
 
 def _summarize_response(resp: object) -> object:
-    text = json.dumps(resp, default=str)
-    if len(text) > 4000:
-        return text[:4000] + "...<truncated>"
-    return resp
+    return _truncate_json(resp)
+
+
+def _truncate_json(value: object, *, max_chars: int = 4000) -> object:
+    text = json.dumps(value, default=str)
+    if len(text) > max_chars:
+        return text[:max_chars] + "...<truncated>"
+    return value
 
 
 if __name__ == "__main__":

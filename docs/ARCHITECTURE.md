@@ -336,9 +336,11 @@ Lifecycle rules:
 
 `memory-mcp` can seed memory from external sources. Two ingestion paths exist:
 
-- **Auto-capture** — hook-driven session events distilled into typed memories
-  (see [auto_capture.md](auto_capture.md)). These are staged observations, not
-  automatically canonical conversation archives.
+- **Auto-capture** — hook-driven session events distilled into typed memories.
+  Enqueue is authorized and bounded; promoted memories are private and retain
+  server-validated, claim-specific staging provenance. These are staged
+  observations, not automatically canonical conversation archives (see
+  [auto_capture.md](auto_capture.md) and [#3](https://github.com/dwovitz/memory-mcp/issues/3)).
 - **Conversation evidence** — the transcript-ingestion contract separates
   episodic archive evidence, reviewable extraction proposals, semantic memory,
   compiled views, and audit lineage (see

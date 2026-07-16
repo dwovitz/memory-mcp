@@ -41,8 +41,9 @@ durable knowledge surfaces automatically without the model having to call
 
 1. `alembic upgrade head` to create `staging_observations`.
 2. `docker compose up -d distiller` to start the worker.
-3. Ensure the MCP server exposes the FastMCP HTTP transport on a known port
-   (default `8765`). Set `ANTHROPIC_API_KEY` in the distiller's environment.
+3. Ensure the MCP server exposes the FastMCP HTTP transport on the hook URL
+   configured below (default `8765`). Set `ANTHROPIC_API_KEY` in the distiller's
+   environment and `MEMORY_MCP_ENABLE_MUTATION_TOOLS=true` on the server.
 
 ## Client-Side Setup
 
@@ -67,6 +68,26 @@ In `~/.claude/settings.json` (or per-project `.claude/settings.json`):
 
 Hooks are non-blocking; if the server is unreachable they swallow the
 error and return immediately so the user's session is never affected.
+
+## Safety and Bounds
+
+- The server authorizes every enqueue as a write, accepts only the four hook
+  event types, rejects known credential patterns, and limits each JSON payload
+  to 6,000 characters. Hooks additionally truncate tool input, responses, and
+  session summaries before sending them.
+- A distiller call handles at most eight observations. It receives only staged,
+  bounded observations; raw observations are not stored as durable memories.
+- Every promoted memory is private by default, marked `metadata.source:
+  auto_capture`, and retains only the staging observation IDs and source event
+  types explicitly cited by the distiller. The server validates those IDs and
+  requires the exact common cited scope; model output cannot replace that
+  provenance, widen a claim's scope, or introduce arbitrary durable-memory
+  fields.
+- Failed model or promotion calls mark their staging rows as failed for
+  observability; hooks remain non-blocking.
+- Private auto-captured memories are excluded from normal retrieval and direct
+  ID dereferencing unless the caller explicitly requests sensitive content and
+  has the server's sensitive-read capability.
 
 ## Observability
 

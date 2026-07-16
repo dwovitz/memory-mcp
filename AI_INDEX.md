@@ -74,7 +74,7 @@ Use code-review-graph MCP tools before grep or broad file reads when available.
 - Project memory and personal memory should remain distinguishable.
 - Retrieval should reduce token usage by surfacing relevant context packets before source reads.
 - SQLite should not be assumed as the right scalable/server default; storage should be evaluated against deployment target.
-- Memory should store compact facts, decisions, rules, commands, constraints, and project context — not raw transcripts, secrets, or sensitive data.
+- Memory should store compact facts, decisions, rules, commands, constraints, and project context — not raw transcripts, secrets, or sensitive data. Auto-capture is authorized at enqueue, bounded before distillation, promotes only private claims, and retains server-validated staging provenance on promotion.
 - Use the smallest meaningful validation loop for the change; do not default to expensive full-repo validation when a targeted check proves the contract.
 - AI index updates are part of story closeout when navigation, commands, contracts, architecture, MCP behavior, storage/retrieval behavior, or generated-file boundaries change.
 
@@ -87,7 +87,7 @@ Use code-review-graph MCP tools before grep or broad file reads when available.
 | Memory schema or lifecycle | `src/memory_mcp/models/`, `src/memory_mcp/repositories/`, `migrations/` | model/repository/migration tests |
 | Authentication or sensitivity | `src/memory_mcp/auth/`, `src/memory_mcp/mcp_tools/server.py` | auth-policy and MCP tests |
 | Wiki/markdown ingestion | `src/memory_mcp/ingest/`, `docs/wiki_ingestion.md` | ingestion test package |
-| Auto-capture/distillation | `hooks/`, `src/memory_mcp/distiller/`, `src/memory_mcp/repositories/staging.py`, `docs/auto_capture.md` | hook, staging, and distiller tests |
+| Auto-capture/distillation | `hooks/`, `src/memory_mcp/mcp_tools/server.py`, `src/memory_mcp/distiller/`, `src/memory_mcp/repositories/staging.py`, `docs/auto_capture.md` | MCP authorization/bounds plus hook, staging, and distiller tests |
 | Conversation evidence design | `docs/conversation_ingestion.md`, `docs/auto_capture.md`, `docs/ARCHITECTURE.md` | documentation link/contract review; do not add runtime storage in the design slice |
 | Runtime/deployment | `Dockerfile`, `docker-compose.yml`, `.env.example`, `README.md` | compose configuration and relevant runtime probe |
 
