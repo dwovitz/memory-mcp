@@ -168,5 +168,5 @@ freshness must report weak context rather than imply a safe conclusion.
   archive, proposal, review, and compiled-view rules for transcript evidence.
 - [Issue #5](https://github.com/dwovitz/memory-mcp/issues/5) will define
   derived-view provenance and invalidation.
-- [Issue #7](https://github.com/dwovitz/memory-mcp/issues/7) will define how
-  these rules are rendered for agents.
+- [Context assembly contract](context_assembly_contract.md) defines how these
+  trust, provenance, and governing-side-effect rules are rendered for agents.

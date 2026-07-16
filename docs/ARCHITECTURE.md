@@ -315,6 +315,10 @@ large source-reading session. Verification budgets are intentionally small and
 are framed around path enumeration or focused snippets, not representative
 whole-file reads.
 
+The [context assembly contract](context_assembly_contract.md) defines the
+complete provenance, authorization-reference, compiled-view, weak-context, and
+write-back envelope that future packet APIs must expose.
+
 ## Lifecycle
 
 ```mermaid

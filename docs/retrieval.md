@@ -33,6 +33,9 @@ derived rather than canonical. Views need foreign-key-backed source provenance,
 scope/sensitivity limits, lifecycle-aware invalidation, and explicit
 source-verification guidance. See [compiled_memory_views.md](compiled_memory_views.md).
 
+The [context assembly contract](context_assembly_contract.md) defines how these
+retrieval results, diagnostics, and source-read limits become an agent packet.
+
 ## Combined retrieval
 
 `ProjectionRetrievalService.retrieve(...)` blends every available signal:
