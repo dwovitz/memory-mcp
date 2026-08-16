@@ -1,0 +1,15 @@
+[mcp_servers.code-review-graph]
+command = "/c/Users/dwovi/AppData/Local/Programs/Python/Python311/Scripts/code-review-graph.exe"
+args = ["serve"]
+
+[mcp_servers.memory-mcp]
+command = "docker"
+args = [
+    "compose",
+    "-f",
+    "/d/git/ai/memory-mcp/docker-compose.yml",
+    "exec",
+    "-T",
+    "memory-mcp",
+    "memory-mcp",
+]
