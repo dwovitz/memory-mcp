@@ -2,6 +2,26 @@
 
 Use the `memory-mcp` MCP server for durable project memory.
 
+## Second Brain Is the Source of Truth
+
+This workspace is a second brain. For user-specific facts, preferences, ratings,
+watch history, and other personal context, first locate the canonical record in
+the local wiki (normally `ai-os/.aios-wiki/`) and follow that record's storage
+policy. Do not treat `memory-mcp` as a replacement for the wiki.
+
+- Before writing a chat-reported personal fact to `memory-mcp`, inspect the
+  relevant wiki index or topic page for a canonical destination and any
+  `storage_policy` declaration.
+- If a wiki record says it is local-only or not for `memory-mcp`, update that
+  record and do not create a duplicate memory. If a duplicate was created in
+  error, archive it.
+- For chat-reported entertainment ratings, append to
+  `ai-os/.aios-wiki/private/entertainment/david/show-ratings.md` unless its
+  storage policy changes. Record only the stated rating and applicable scope
+  (for example, seasons watched); do not infer extra preferences.
+- Use `memory-mcp` to retrieve wiki-derived context or to store a fact only
+  when the wiki explicitly permits that synchronization.
+
 ## Retrieval
 
 Before substantial implementation, review, debugging, or planning, call
