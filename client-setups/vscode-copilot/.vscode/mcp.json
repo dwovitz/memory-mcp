@@ -6,13 +6,13 @@
       "args": [
         "compose",
         "-f",
-        "D:\\git\\ai\\memory-mcp\\docker-compose.yml",
+        "/home/dwovitz/src/ai/memory-mcp/docker-compose.yml",
         "exec",
         "-T",
         "memory-mcp",
         "memory-mcp"
       ],
-      "cwd": "D:\\git\\ai\\memory-mcp"
+      "cwd": "/home/dwovitz/src/ai/memory-mcp"
     }
   }
 }

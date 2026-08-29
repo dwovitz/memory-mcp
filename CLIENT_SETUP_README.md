@@ -20,9 +20,9 @@ baselines, not permanent pins.
 
 Run from the repository root:
 
-```powershell
-if (-not (Test-Path .env)) { Copy-Item .env.example .env }
-New-Item -ItemType Directory -Force C:\ai\memory-postgres-data
+```bash
+[ -f .env ] || cp .env.example .env
+mkdir -p "$(grep '^PGDATA_HOST_PATH=' .env | cut -d= -f2-)"
 python -m pip install -e ".[dev]"
 docker compose up -d postgres
 docker compose ps
@@ -32,36 +32,38 @@ python -m pytest
 
 The server runs over stdio:
 
-```powershell
+```bash
 memory-mcp
 ```
 
 Equivalent module form:
 
-```powershell
+```bash
 python -m memory_mcp.main
 ```
 
-If a client needs an absolute command path on Windows, use the editable install
-entry point:
+If a client needs an absolute command path, use the editable install entry
+point (adjust the leading path if the repo lives somewhere other than
+`~/src/ai/memory-mcp`):
 
 ```text
-D:\git\ai\memory-mcp\.venv\Scripts\memory-mcp.exe
+/home/dwovitz/src/ai/memory-mcp/.venv/bin/memory-mcp
 ```
 
 ## MCP Server Configuration
 
 Use one of these command shapes in clients that support local stdio MCP
-servers.
+servers. The Docker stdio form is the one actually in use on this machine —
+memory-mcp runs fully containerized here, with no host `.venv`.
 
-Preferred executable form:
+Preferred executable form (host venv, if you set one up):
 
 ```json
 {
   "mcpServers": {
     "memory-mcp": {
-      "command": "D:\\git\\ai\\memory-mcp\\.venv\\Scripts\\memory-mcp.exe",
-      "cwd": "D:\\git\\ai\\memory-mcp"
+      "command": "/home/dwovitz/src/ai/memory-mcp/.venv/bin/memory-mcp",
+      "cwd": "/home/dwovitz/src/ai/memory-mcp"
     }
   }
 }
@@ -73,30 +75,31 @@ Portable Python module form:
 {
   "mcpServers": {
     "memory-mcp": {
-      "command": "D:\\git\\ai\\memory-mcp\\.venv\\Scripts\\python.exe",
+      "command": "/home/dwovitz/src/ai/memory-mcp/.venv/bin/python",
       "args": ["-m", "memory_mcp.main"],
-      "cwd": "D:\\git\\ai\\memory-mcp"
+      "cwd": "/home/dwovitz/src/ai/memory-mcp"
     }
   }
 }
 ```
 
-Docker stdio form:
+Docker stdio form (what actually runs on this machine):
 
 ```json
 {
   "mcpServers": {
     "memory-mcp": {
-      "command": "docker-compose",
+      "command": "docker",
       "args": [
+        "compose",
         "-f",
-        "D:\\git\\ai\\memory-mcp\\docker-compose.yml",
+        "/home/dwovitz/src/ai/memory-mcp/docker-compose.yml",
         "exec",
         "-T",
         "memory-mcp",
         "memory-mcp"
       ],
-      "cwd": "D:\\git\\ai\\memory-mcp"
+      "cwd": "/home/dwovitz/src/ai/memory-mcp"
     }
   }
 }
@@ -378,7 +381,7 @@ secrets, connection strings, or sensitive personal data.
         "hooks": [
           {
             "type": "command",
-            "command": "python D:\\git\\ai\\memory-mcp\\scripts\\validate_memory_write.py"
+            "command": "python /home/dwovitz/src/ai/memory-mcp/scripts/validate_memory_write.py"
           }
         ]
       }
