@@ -4,6 +4,7 @@ services:
   memory-mcp:
     build:
       context: .
+    user: "${UID:-1000}:${GID:-1000}"
     env_file:
       - .env
     environment:
@@ -21,14 +22,19 @@ services:
   gateway:
     build:
       context: .
+    user: "${UID:-1000}:${GID:-1000}"
     env_file:
       - .env
     environment:
       POSTGRES_HOST: postgres
       MEMORY_MCP_ENV_FILE: /app/.env
+    # Container still listens on 0.0.0.0 internally (that's the bind inside its own network
+    # namespace); the host-exposure control is the published-port host address below, per P-3.
     command: ["memory-mcp", "--transport", "streamable-http", "--host", "0.0.0.0", "--port", "3000"]
     ports:
-      - "${GATEWAY_BIND_HOST:-0.0.0.0}:${GATEWAY_PORT:-3000}:3000"
+      # MIG-001 step 44 / P-3: loopback by default. GATEWAY_BIND_HOST stays overridable in .env
+      # for the rare case a host needs it elsewhere, but the default must never be 0.0.0.0.
+      - "${GATEWAY_BIND_HOST:-127.0.0.1}:${GATEWAY_PORT:-3000}:3000"
     volumes:
       - .:/app
     depends_on:
@@ -39,6 +45,7 @@ services:
   distiller:
     build:
       context: .
+    user: "${UID:-1000}:${GID:-1000}"
     env_file:
       - .env
     environment:

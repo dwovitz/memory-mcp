@@ -60,6 +60,24 @@ def upgrade() -> None:
     op.execute("CREATE EXTENSION IF NOT EXISTS vector")
     op.execute("CREATE EXTENSION IF NOT EXISTS pgcrypto")
 
+    # MIG-001 fix: this migration's docstring says "create missing tables after schema reset" —
+    # i.e. it assumes 0001-0003's versions of these tables were already dropped out-of-band before
+    # it runs. That never happens on a fresh database (this one included): 0001-0003 create the
+    # old-constraint-name versions moments earlier in this same `alembic upgrade head` invocation,
+    # so this unconditional op.create_table() hit DuplicateTable and rolled back the whole run.
+    # Dropping them here first makes the migration do what its own docstring says on every
+    # environment, fresh or previously-reset alike. Order matches downgrade()'s drop order
+    # (dependents before what they reference). Already-migrated environments never re-run this
+    # upgrade(), so this is safe for them too.
+    op.execute("DROP TABLE IF EXISTS pruning_log CASCADE")
+    op.execute("DROP TABLE IF EXISTS context_packet_memories CASCADE")
+    op.execute("DROP TABLE IF EXISTS context_packets CASCADE")
+    op.execute("DROP TABLE IF EXISTS retrieval_profiles CASCADE")
+    op.execute("DROP TABLE IF EXISTS relationships CASCADE")
+    op.execute("DROP TABLE IF EXISTS memory_tags CASCADE")
+    op.execute("DROP TABLE IF EXISTS memories CASCADE")
+    op.execute("DROP TABLE IF EXISTS entities CASCADE")
+
     op.create_table(
         "entities",
         sa.Column("id", postgresql.UUID(as_uuid=True), server_default=sa.text("gen_random_uuid()"), nullable=False),

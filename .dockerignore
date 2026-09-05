@@ -1,4 +1,7 @@
 .git
+# MIG-001 step 49: build context is "." (see docker-compose.yml) and .gitignore does not govern
+# the build context — only this file does. .env holds POSTGRES_PASSWORD and other secrets.
+.env
 .pytest_cache
 .venv
 __pycache__
