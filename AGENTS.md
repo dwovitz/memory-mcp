@@ -7,6 +7,7 @@ memory-mcp is a **retrieval/projection service**, not an unchecked runtime assis
 Shared always-on policy — core working style, branch and validation workflow, memory retrieval and
 write policy, routing and delegation, safety — is authored once in `ai-rules` and is not repeated
 here. Read `ai-rules/rules/`. This file carries only what is specific to `memory-mcp`.
+The shared work cycle is the `work-cycle` skill; this repo's gates win wherever they are stricter.
 
 ## AI Index Startup And Closeout
 
@@ -25,8 +26,9 @@ a branch changes MCP contracts, storage, retrieval, scopes, safety, Docker,
 major entrypoints, or generated-index boundaries. Refresh only the
 automation-owned region with `python scripts/ai_index_refresh.py`.
 
-Every closeout must state whether the AI index was reviewed, which index files
-changed, and why no update was needed when the check does not require one.
+When a change lands — a PR or a merge — state whether the AI index was reviewed,
+which index files changed, and why no update was needed when the check does not
+require one. This is not a per-step obligation.
 
 ## Issue Readiness — Execution Contract
 
