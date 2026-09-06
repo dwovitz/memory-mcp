@@ -17,6 +17,6 @@ inspect or print secret values.
 Shared always-on policy is authored once in `ai-rules` and installed from there.
 Read it at `/home/dwovitz/src/ai/ai-rules/rules/` — core, workflow, memory, routing, safety.
 
-Do not copy shared policy into this file. Repo-specific rules live in `AGENTS.md`,
-which stays canonical and wins on conflict.
+Do not copy shared policy into this file. Repo-specific rules are canonical in
+`AGENTS.md` and win on conflict.
 <!-- ai-rules:end -->
